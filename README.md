@@ -30,12 +30,12 @@ Personal calorie tracker PWA for iPhone Home Screen.
 | Gemini estimate for unknowns | Helpful; confirm before trusting |
 | Plate photo alone | Often ~20–40% off — never barcode-grade |
 
-## Deploy
+## Data permanence
 
-GitHub Pages: branch `main`, folder `/ (root)`. Keep `index.html` lowercase.
+Your meals, personal food dictionary, and Gemini key live in **Safari localStorage on the phone**.
 
-No build step. Static files only: `index.html`, `manifest.webmanifest`, `sw.js`, `icons/`.
+- App updates **must not** rename storage keys or wipe history.
+- **Clear today** only clears that day — not other days, dictionary, or settings.
+- **Setup → Copy full backup** saves a JSON you can keep in Notes/Files and restore later.
 
-## Out of scope (for now)
-
-App Store binary, HealthKit auto-read, accounts/cloud sync, eating back all exercise kcal. Native HealthKit needs Apple Developer ($99) — ask before charging that.
+Going forward: features can change; your logged data should survive.
