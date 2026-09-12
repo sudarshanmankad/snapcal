@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="SnapCal" />
+<meta name="theme-color" content="#f3eee7" />
+<title>SnapCal</title>
+<style>
+:root{--bg:#f3eee7;--card:#fffdf9;--ink:#1c1612;--muted:#7a7168;--accent:#e45a3c;--sage:#2f6f5e}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--ink)}
+main{max-width:430px;margin:0 auto;min-height:100svh;padding:calc(16px + env(safe-area-inset-top)) 16px calc(90px + env(safe-area-inset-bottom))}
+h1{margin:4px 0 12px;font-size:28px}.eyebrow{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase}
+.card{background:var(--card);border-radius:20px;padding:14px;margin:10px 0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.big{font-size:26px;font-weight:750;margin:0}.muted{color:var(--muted);margin:0;font-size:13px}
+button,textarea,input{font:inherit}button{border:0;background:none}
+.btn{display:block;width:100%;min-height:48px;border-radius:16px;font-weight:700;margin-top:8px}
+.primary{background:var(--accent);color:#fff}.light{background:#fff;border:1px solid #e8ddd3}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{background:#efe6dc;border-radius:999px;padding:10px 14px;min-height:44px;font-weight:650}
+textarea,input[type=text]{width:100%;border:1px solid #e8ddd3;border-radius:14px;padding:12px;font-size:16px}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;padding:8px 12px env(safe-area-inset-bottom);background:#fffdf9cc;backdrop-filter:blur(12px);border-top:1px solid #eadfd4}
+.tabs button{min-height:44px;font-weight:700;color:var(--muted)}.tabs .on{color:var(--ink)}
+.meal{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f0e6dc}
+.sheet{position:fixed;inset:0;background:#0006;display:flex;align-items:flex-end}
+.sheet .card{width:100%;border-radius:24px 24px 0 0;margin:0;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">Today · dummy</p>
+  <h1>SnapCal</h1>
+  <div class="card row">
+    <div>
+      <p class="muted">Remaining of 1800</p>
+      <p class="big" id="left">1800 kcal</p>
+    </div>
+    <div><b id="eaten">0</b> eaten</div>
+  </div>
+  <div class="card">
+    <p class="eyebrow">Fitness Move</p>
+    <p class="big" id="move">Tap a number</p>
+    <div class="chips" id="moveChips"></div>
+  </div>
+  <div class="card">
+    <textarea id="text" rows="2" placeholder="I ate 1 idli, 2 cookies, 50g rice"></textarea>
+    <button class="btn primary" id="log">Log it</button>
+    <div class="chips" id="quick" style="margin-top:10px"></div>
+  </div>
+  <div class="card">
+    <div class="row"><b>Meals</b><span class="muted" id="count">0</span></div>
+    <div id="meals"></div>
+  </div>
+  <p class="muted">Phone-only dummy. Folder upload is not needed.</p>
+</main>
+<nav class="tabs">
+  <button class="on" data-tab="today">Today</button>
+  <button data-tab="snap">Snap</button>
+  <button data-tab="setup">Setup</button>
+</nav>
+<section id="snap" class="hide" style="max-width:430px;margin:0 auto;padding:20px">
+  <h1>Snap</h1>
+  <p class="muted">Dummy camera. Pick a photo; calories still come from chips or chat.</p>
+  <input id="cam" type="file" accept="image/*" capture="environment" />
+  <img id="preview" alt="" style="max-width:100%;border-radius:16px;margin-top:12px" />
+</section>
+<section id="setup" class="hide" style="max-width:430px;margin:0 auto;padding:20px">
+  <h1>Setup</h1>
+  <p>Goal is 1800. Data stays on this phone.</p>
+  <button class="btn light" id="clear">Clear today</button>
+</section>
+<div id="sheet" class="sheet hide"><div class="card" id="sheetBody"></div></div>
+<script>
+const FOODS=[
+  ["idli","Idli",70,40,["idly"]],
+  ["roti","Roti",80,40,["chapati"]],
+  ["dal","Dal",200,200,["daal"]],
+  ["rice","Rice",130,100,["white rice"]],
+  ["chai","Chai",90,200,["tea"]],
+  ["cookie","Cookie",80,15,["cookies","biscuit"]],
+  ["eggs","Eggs",70,50,["egg"]],
+  ["banana","Banana",105,118,[]]
+];
+const KEY="snapcal-onefile";
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{move:0,meals:[]}}catch(e){return{move:0,meals:[]}}}
+function save(s){localStorage.setItem(KEY,JSON.stringify(s))}
+let state=load();
+function findFood(t){
+  t=t.trim().toLowerCase().replace(/s$/,"");
+  return FOODS.find(f=>[f[0],f[1],...f[4]].some(n=>n.toLowerCase()===t||n.toLowerCase().startsWith(t)));
+}
+function parse(raw){
+  raw=raw.replace(/^(i\s+)?(ate|had|log(ged)?)\s+/i,"").trim();
+  return raw.split(/,| and | & /i).map(p=>p.trim()).filter(Boolean).map(chunk=>{
+    let m=chunk.match(/^(\d+(?:\.\d+)?)\s*(g|grams?)\s+(.+)$/i);
+    if(m){const f=findFood(m[3]); if(!f)return null; const q=+m[1]; return {name:f[1],detail:q+" g "+f[1],kcal:Math.round(f[2]/f[3]*q)};}
+    m=chunk.match(/^(\d+(?:\.\d+)?)\s+(.+)$/i);
+    if(m){const f=findFood(m[2]); if(!f)return null; const q=+m[1]; return {name:f[1],detail:q+" × "+f[1],kcal:Math.round(f[2]*q)};}
+    const f=findFood(chunk); if(!f)return null; return {name:f[1],detail:"1 × "+f[1],kcal:f[2]};
+  }).filter(Boolean);
+}
+function eaten(){return state.meals.reduce((s,m)=>s+m.items.reduce((a,i)=>a+i.kcal,0),0)}
+function render(){
+  const e=eaten();
+  document.getElementById("eaten").textContent=e;
+  document.getElementById("left").textContent=(1800-e).toLocaleString()+" kcal";
+  document.getElementById("move").textContent=state.move?state.move+" kcal":"Tap a number";
+  document.getElementById("count").textContent=state.meals.length;
+  document.getElementById("meals").innerHTML=state.meals.slice().reverse().map(m=>`<div class="meal"><span>${m.items.map(i=>i.detail).join(", ")}</span><b>${m.items.reduce((a,i)=>a+i.kcal,0)}</b></div>`).join("")||"<p class='muted'>No meals yet</p>";
+}
+document.getElementById("quick").innerHTML=FOODS.map(f=>`<button class="chip" data-id="${f[0]}">${f[1]}</button>`).join("");
+document.getElementById("moveChips").innerHTML=[250,400,550].map(n=>`<button class="chip" data-m="${n}">${n}</button>`).join("");
+document.getElementById("quick").onclick=e=>{
+  const id=e.target.dataset.id; if(!id)return;
+  const f=FOODS.find(x=>x[0]===id);
+  state.meals.push({items:[{name:f[1],detail:"1 × "+f[1],kcal:f[2]}]});
+  save(state); render();
+};
+document.getElementById("moveChips").onclick=e=>{
+  const n=e.target.dataset.m; if(!n)return;
+  state.move=+n; save(state); render();
+};
+document.getElementById("log").onclick=()=>{
+  const items=parse(document.getElementById("text").value);
+  if(!items.length){alert("Try: I ate 1 idli, 2 cookies, 50g rice");return;}
+  const body=document.getElementById("sheetBody");
+  const tot=items.reduce((s,i)=>s+i.kcal,0);
+  body.innerHTML=`<h2>Save meal? ${tot} kcal</h2>`+items.map(i=>`<div class="row"><span>${i.detail}</span><b>${i.kcal}</b></div>`).join("")+`<button class="btn primary" id="ok">Save to today</button><button class="btn light" id="no">Cancel</button>`;
+  document.getElementById("sheet").classList.remove("hide");
+  document.getElementById("ok").onclick=()=>{state.meals.push({items});save(state);document.getElementById("text").value="";document.getElementById("sheet").classList.add("hide");render();};
+  document.getElementById("no").onclick=()=>document.getElementById("sheet").classList.add("hide");
+};
+document.getElementById("clear").onclick=()=>{state={move:0,meals:[]};save(state);render();};
+document.getElementById("cam").onchange=e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f)return;
+  document.getElementById("preview").src=URL.createObjectURL(f);
+};
+document.querySelector(".tabs").onclick=e=>{
+  const t=e.target.dataset.tab; if(!t)return;
+  document.querySelector("main").classList.toggle("hide",t!=="today");
+  document.getElementById("snap").classList.toggle("hide",t!=="snap");
+  document.getElementById("setup").classList.toggle("hide",t!=="setup");
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
+};
+render();
+</script>
+</body>
+</html>
