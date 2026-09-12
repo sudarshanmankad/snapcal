@@ -667,12 +667,12 @@ textarea{resize:vertical;min-height:72px}
     selectedSnapFoods = {};
     document.getElementById("preview").removeAttribute("src");
     document.getElementById("previewWrap").classList.add("hide");
-    document.getElementById("snapActions").classList.add("hide");
     document.getElementById("cam").value = "";
     document.getElementById("labelKcal").value = "";
     document.getElementById("labelServings").value = "1";
     document.getElementById("fitKcal").value = "";
     renderSnapFoodChips();
+    updateSnapModeUI();
   }
 
   function renderSnapFoodChips() {
@@ -691,19 +691,25 @@ textarea{resize:vertical;min-height:72px}
     const labelF = document.getElementById("labelFields");
     const fitF = document.getElementById("fitnessFields");
     const foods = document.getElementById("snapFoods");
+    const actions = document.getElementById("snapActions");
     labelF.classList.add("hide");
     fitF.classList.add("hide");
     foods.classList.remove("hide");
     if (snapMode === "plate") {
       hint.textContent = "Plate: attach a photo, then pick foods. Estimate only — confirm before save.";
+      // actions appear after a photo is chosen
+      if (!snapPhotoData) actions.classList.add("hide");
+      else actions.classList.remove("hide");
     } else if (snapMode === "label") {
       hint.textContent = "Label: photo optional for your records. Type kcal/serving × how many you ate.";
       labelF.classList.remove("hide");
       foods.classList.add("hide");
+      actions.classList.remove("hide");
     } else {
-      hint.textContent = "Fitness screenshot: type the Move number. OCR comes later.";
+      hint.textContent = "Fitness screenshot: photo optional. Type the Move number. OCR comes later.";
       fitF.classList.remove("hide");
       foods.classList.add("hide");
+      actions.classList.remove("hide");
     }
   }
 
