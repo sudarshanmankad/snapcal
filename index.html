@@ -136,7 +136,7 @@ textarea{resize:vertical;min-height:72px}
     <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed"></textarea>
     <button class="btn primary" id="logBtn" type="button">Parse &amp; confirm</button>
     <div class="chips" id="quick" style="margin-top:10px"></div>
-    <p class="tiny" style="margin-top:8px">Counts &amp; grams beat plate photos. Say cooked vs raw for rice. Brand cookies when you can.</p>
+    <p class="tiny" style="margin-top:8px" id="chatHint">Built-in foods + foods you save. Optional Gemini (Setup) for unknowns. Always confirm before save.</p>
   </div>
 
   <div class="card">
@@ -199,8 +199,29 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny">Intake target. Workouts do not auto-increase this.</p>
   </div>
   <div class="card">
+    <p class="eyebrow">Smart chat (optional)</p>
+    <p class="muted">Built-in list is a starter. Your phone also learns foods you confirm. For unknown foods, paste a free <b>Gemini API key</b> — stored only on this phone, never in GitHub.</p>
+    <label class="tiny" style="display:block;margin-top:10px">Gemini API key</label>
+    <input type="password" id="geminiKey" autocomplete="off" placeholder="AIza…" />
+    <label class="tiny" style="display:block;margin-top:8px">Model</label>
+    <input type="text" id="geminiModel" value="gemini-2.0-flash" />
+    <label class="row" style="margin-top:10px;gap:10px">
+      <input type="checkbox" id="useLlm" checked style="width:auto" />
+      <span class="tiny" style="color:var(--ink)">Use Gemini when chat has unmatched foods</span>
+    </label>
+    <button class="btn primary" id="saveAiBtn" type="button">Save AI settings</button>
+    <button class="btn light" id="clearAiBtn" type="button">Remove key</button>
+    <p class="tiny" style="margin-top:8px">Get a key: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>. Free tier is enough for meal chat. Key stays in Safari localStorage.</p>
+  </div>
+  <div class="card">
+    <p class="eyebrow">Your food dictionary</p>
+    <p class="muted" id="myFoodsCount">0 personal foods on this phone.</p>
+    <p class="tiny">Grows when you save meals (especially with grams or “which is 160cal”). Used before Gemini.</p>
+    <button class="btn light" id="clearMyFoodsBtn" type="button">Clear personal foods</button>
+  </div>
+  <div class="card">
     <p class="eyebrow">Accuracy (honest)</p>
-    <p class="muted">Label / barcode / weighed grams → high. Chat with counts → good. Plate photo alone → often 20–40% off. Consumer “AI snap” apps often underestimate.</p>
+    <p class="muted">Label / barcode / weighed grams → high. Chat with counts → good. LLM estimates → helpful but not lab-grade. Plate photo alone → often 20–40% off.</p>
   </div>
   <div class="card">
     <p class="eyebrow">Install</p>
@@ -228,6 +249,8 @@ textarea{resize:vertical;min-height:72px}
 (function () {
   const BUDGET = 1800;
   const KEY = "snapcal-v1";
+  const SETTINGS_KEY = "snapcal-settings";
+  const MYFOODS_KEY = "snapcal-my-foods";
   const FOODS = [
     { id: "idli", name: "Idli", kcal: 70, perG: null, unit: "piece", aliases: ["idly"] },
     { id: "dosa", name: "Dosa", kcal: 120, perG: null, unit: "piece", aliases: [] },
@@ -254,6 +277,101 @@ textarea{resize:vertical;min-height:72px}
     { id: "milk", name: "Milk", kcal: 150, perG: 0.64, unit: "cup", aliases: ["whole milk"] },
     { id: "apple", name: "Apple", kcal: 95, perG: null, unit: "piece", aliases: [] }
   ];
+
+  function loadSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+      if (s && typeof s === "object") {
+        return {
+          geminiKey: s.geminiKey || "",
+          model: s.model || "gemini-2.0-flash",
+          useLlm: s.useLlm !== false
+        };
+      }
+    } catch (e) {}
+    return { geminiKey: "", model: "gemini-2.0-flash", useLlm: true };
+  }
+
+  function saveSettings(s) {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  }
+
+  function loadMyFoods() {
+    try {
+      const list = JSON.parse(localStorage.getItem(MYFOODS_KEY));
+      if (Array.isArray(list)) return list;
+    } catch (e) {}
+    return [];
+  }
+
+  function saveMyFoods(list) {
+    localStorage.setItem(MYFOODS_KEY, JSON.stringify(list));
+  }
+
+  function allFoods() {
+    return loadMyFoods().concat(FOODS);
+  }
+
+  function upsertMyFood(entry) {
+    const list = loadMyFoods();
+    const key = normName(entry.name);
+    let found = null;
+    list.forEach(function (f) {
+      if (normName(f.name) === key || (f.aliases || []).map(normName).indexOf(key) >= 0) found = f;
+    });
+    if (found) {
+      if (entry.perG != null) found.perG = entry.perG;
+      if (entry.kcal != null) found.kcal = entry.kcal;
+      found.updatedAt = Date.now();
+    } else {
+      list.unshift({
+        id: "my-" + key.replace(/\s+/g, "-").slice(0, 40),
+        name: entry.name,
+        kcal: entry.kcal || 0,
+        perG: entry.perG != null ? entry.perG : null,
+        unit: entry.unit || "serving",
+        aliases: entry.aliases || [],
+        source: entry.source || "learned",
+        updatedAt: Date.now()
+      });
+    }
+    saveMyFoods(list.slice(0, 200));
+  }
+
+  function learnFromItems(items) {
+    (items || []).forEach(function (item) {
+      if (!item || !item.name || !item.kcal) return;
+      const gm = String(item.detail || "").match(/^(\d+(?:\.\d+)?)\s*g\b/i);
+      const perG = gm ? +(item.kcal / +gm[1]).toFixed(3) : null;
+      upsertMyFood({
+        name: item.name,
+        kcal: item.kcal,
+        perG: perG,
+        source: item.grade || "learned",
+        aliases: []
+      });
+    });
+    renderSetupAi();
+  }
+
+  function renderSetupAi() {
+    const s = loadSettings();
+    const keyEl = document.getElementById("geminiKey");
+    const modelEl = document.getElementById("geminiModel");
+    const useEl = document.getElementById("useLlm");
+    if (keyEl) keyEl.value = s.geminiKey || "";
+    if (modelEl) modelEl.value = s.model || "gemini-2.0-flash";
+    if (useEl) useEl.checked = s.useLlm !== false;
+    const n = loadMyFoods().length;
+    const countEl = document.getElementById("myFoodsCount");
+    if (countEl) countEl.textContent = n + " personal food" + (n === 1 ? "" : "s") + " on this phone.";
+    const hint = document.getElementById("chatHint");
+    if (hint) {
+      hint.textContent = s.geminiKey && s.useLlm
+        ? "Smart chat on: built-in + your dictionary + Gemini for unknowns. Always confirm before save."
+        : "Built-in foods + foods you save. Add a Gemini key in Setup for unknown foods. Always confirm before save.";
+    }
+  }
 
   function todayKey(d) {
     const x = d || new Date();
@@ -361,16 +479,16 @@ textarea{resize:vertical;min-height:72px}
     t = stripSaidKcal(t).cleaned;
     // cooked/raw rice cues
     if (/\b(raw|uncooked)\b/.test(t) && /\brice\b/.test(t)) {
-      return FOODS.find(function (f) { return f.id === "rice-raw"; });
+      return allFoods().find(function (f) { return f.id === "rice-raw"; });
     }
     if (/\b(cooked|steamed)\b/.test(t) && /\brice\b/.test(t)) {
-      return FOODS.find(function (f) { return f.id === "rice"; });
+      return allFoods().find(function (f) { return f.id === "rice"; });
     }
     // strip quantity words leftovers
     t = t.replace(/\b(pieces?|pcs?|cups?|bowls?|plates?|servings?|scoops?)\b/g, "").trim();
     let best = null;
     let bestScore = -1;
-    FOODS.forEach(function (f) {
+    allFoods().forEach(function (f) {
       const names = [f.id, f.name].concat(f.aliases || []).map(normName);
       names.forEach(function (n) {
         if (!n) return;
@@ -385,6 +503,84 @@ textarea{resize:vertical;min-height:72px}
       });
     });
     return best;
+  }
+
+  function parseWithGemini(text) {
+    const s = loadSettings();
+    if (!s.geminiKey || !s.useLlm) return Promise.resolve(null);
+    const model = encodeURIComponent(s.model || "gemini-2.0-flash");
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+    const prompt =
+      "Parse this meal log into calories. Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), grade (llm|said|grams), warn (short string).\n" +
+      "Rules: use USDA-like densities; cooked vs raw rice matters; if user says which/that is N cal, use that kcal and grade said; be slightly conservative (prefer not underestimating); no markdown.\n" +
+      "Meal: " + text;
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, responseMimeType: "application/json" }
+      })
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) {
+          const msg = (data && data.error && data.error.message) || ("Gemini HTTP " + res.status);
+          throw new Error(msg);
+        }
+        const rawText = (((data.candidates || [])[0] || {}).content || {}).parts
+          ? data.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("")
+          : "";
+        let parsed;
+        try {
+          parsed = JSON.parse(rawText);
+        } catch (e) {
+          const m = rawText.match(/\[[\s\S]*\]/);
+          if (!m) throw new Error("Gemini returned non-JSON");
+          parsed = JSON.parse(m[0]);
+        }
+        if (!Array.isArray(parsed)) throw new Error("Gemini JSON was not an array");
+        return parsed.map(function (row) {
+          return {
+            name: String(row.name || "Food").trim(),
+            detail: String(row.detail || row.name || "Food").trim(),
+            kcal: Math.max(0, Math.round(+row.kcal || 0)),
+            grade: row.grade === "said" || row.grade === "grams" ? row.grade : "llm",
+            warn: row.warn || "LLM estimate — confirm before trusting."
+          };
+        }).filter(function (i) { return i.kcal > 0; });
+      });
+    });
+  }
+
+  async function parseChatSmart(raw) {
+    const local = parseChat(raw);
+    const s = loadSettings();
+    if (!local.unknown.length) return { items: local.items, unknown: [], sourceNote: "local" };
+    if (!s.geminiKey || !s.useLlm) return local;
+    try {
+      const llmItems = await parseWithGemini(raw);
+      if (!llmItems || !llmItems.length) return local;
+      // Prefer local matched lines; fill gaps from LLM by replacing whole parse when local incomplete
+      if (!local.items.length) {
+        return { items: llmItems, unknown: [], sourceNote: "gemini" };
+      }
+      // Merge: keep local items, append LLM items whose names aren't already covered
+      const have = {};
+      local.items.forEach(function (i) { have[normName(i.name)] = true; });
+      const extra = llmItems.filter(function (i) { return !have[normName(i.name)]; });
+      return {
+        items: local.items.concat(extra),
+        unknown: [],
+        sourceNote: "local+gemini"
+      };
+    } catch (err) {
+      return {
+        items: local.items,
+        unknown: local.unknown,
+        sourceNote: "local",
+        llmError: String(err.message || err)
+      };
+    }
   }
 
   function parseChat(raw) {
@@ -492,6 +688,7 @@ textarea{resize:vertical;min-height:72px}
 
   function gradeBadge(g) {
     if (g === "label" || g === "grams" || g === "said") return '<span class="badge label">' + g + "</span>";
+    if (g === "llm") return '<span class="badge est">ai</span>';
     return '<span class="badge est">' + (g || "est") + "</span>";
   }
 
@@ -647,9 +844,10 @@ textarea{resize:vertical;min-height:72px}
         photo: photo
       });
       saveAll(db);
+      learnFromItems(items);
       closeSheet();
       if (source === "chat") document.getElementById("text").value = "";
-      if (source.indexOf("snap") === 0) clearSnap();
+      if (String(source).indexOf("snap") === 0) clearSnap();
       renderToday();
       toast("Saved · " + tot + " kcal");
     };
@@ -819,9 +1017,59 @@ textarea{resize:vertical;min-height:72px}
   document.getElementById("editMoveBtn").onclick = openMoveEditor;
   document.getElementById("editWorkoutBtn").onclick = openWorkoutEditor;
 
-  document.getElementById("logBtn").onclick = function () {
-    const parsed = parseChat(document.getElementById("text").value);
-    confirmMeal({ items: parsed.items, unknown: parsed.unknown, source: "chat" });
+  document.getElementById("logBtn").onclick = async function () {
+    const raw = document.getElementById("text").value;
+    const btn = document.getElementById("logBtn");
+    const s = loadSettings();
+    const localProbe = parseChat(raw);
+    if (localProbe.unknown.length && s.geminiKey && s.useLlm) {
+      btn.disabled = true;
+      btn.textContent = "Asking Gemini…";
+    }
+    try {
+      const parsed = await parseChatSmart(raw);
+      if (parsed.llmError) toast("Gemini: " + parsed.llmError);
+      confirmMeal({
+        items: parsed.items,
+        unknown: parsed.unknown,
+        source: parsed.sourceNote && parsed.sourceNote.indexOf("gemini") >= 0 ? "chat-ai" : "chat"
+      });
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Parse & confirm";
+    }
+  };
+
+  document.getElementById("saveAiBtn").onclick = function () {
+    saveSettings({
+      geminiKey: document.getElementById("geminiKey").value.trim(),
+      model: document.getElementById("geminiModel").value.trim() || "gemini-2.0-flash",
+      useLlm: document.getElementById("useLlm").checked
+    });
+    renderSetupAi();
+    toast(loadSettings().geminiKey ? "AI settings saved on this phone" : "Saved (no key)");
+  };
+
+  document.getElementById("clearAiBtn").onclick = function () {
+    saveSettings({ geminiKey: "", model: "gemini-2.0-flash", useLlm: true });
+    renderSetupAi();
+    toast("Gemini key removed");
+  };
+
+  document.getElementById("clearMyFoodsBtn").onclick = function () {
+    openSheet(
+      '<p class="eyebrow">Dictionary</p><h2 style="margin:4px 0 8px">Clear personal foods?</h2>' +
+      '<p class="muted">Built-in foods stay. Only foods learned on this phone are removed.</p>' +
+      '<button class="btn danger" id="sheetOk" type="button">Clear dictionary</button>' +
+      '<button class="btn light" id="sheetNo" type="button">Cancel</button>'
+    );
+    document.getElementById("sheetOk").onclick = function () {
+      saveMyFoods([]);
+      closeSheet();
+      renderSetupAi();
+      toast("Personal foods cleared");
+    };
+    document.getElementById("sheetNo").onclick = closeSheet;
   };
 
   document.getElementById("meals").onclick = function (e) {
@@ -971,6 +1219,7 @@ textarea{resize:vertical;min-height:72px}
       b.classList.toggle("on", b.getAttribute("data-tab") === t);
     });
     if (t === "history") renderHistory();
+    if (t === "setup") renderSetupAi();
   }
 
   document.querySelector(".tabs").onclick = function (e) {
@@ -991,6 +1240,7 @@ textarea{resize:vertical;min-height:72px}
   applyMoveQuery();
   updateSnapModeUI();
   renderSnapFoodChips();
+  renderSetupAi();
   renderToday();
 })();
 </script>
