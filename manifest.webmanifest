@@ -1,0 +1,25 @@
+{
+  "name": "SnapCal",
+  "short_name": "SnapCal",
+  "description": "Personal calorie tracker — chat, snap, Fitness Move. 1800 kcal food budget.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3eee7",
+  "theme_color": "#1c1612",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
