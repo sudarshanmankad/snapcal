@@ -150,7 +150,7 @@ textarea{resize:vertical;min-height:72px}
     <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed"></textarea>
     <button class="btn primary" id="logBtn" type="button">Parse &amp; confirm</button>
     <div class="chips" id="quick" style="margin-top:10px"></div>
-    <p class="tiny" style="margin-top:8px" id="chatHint">Built-in foods + foods you save. Optional Gemini (Setup) for unknowns. Always confirm before save.</p>
+    <p class="tiny" style="margin-top:8px" id="chatHint">Built-in foods + foods you save. Free-form chat needs a Gemini key in Setup (on by default once keyed). Always confirm before save.</p>
   </div>
 
   <div class="card">
@@ -214,7 +214,7 @@ textarea{resize:vertical;min-height:72px}
   </div>
   <div class="card">
     <p class="eyebrow">Smart chat (optional)</p>
-    <p class="muted">Built-in list is a starter. Your phone also learns foods you confirm. For unknown foods, paste a free <b>Gemini API key</b> — stored only on this phone, never in GitHub.</p>
+    <p class="muted">Built-in list is a starter. Your phone also learns foods you confirm. Chat is not fully smart until you paste a free <b>Gemini API key</b> — then it can read free-form meals. For unknown foods, paste a free <b>Gemini API key</b> — stored only on this phone, never in GitHub.</p>
     <label class="tiny" style="display:block;margin-top:10px">Gemini API key</label>
     <input type="password" id="geminiKey" autocomplete="off" placeholder="AIza…" />
     <label class="tiny" style="display:block;margin-top:8px">Model</label>
@@ -314,7 +314,7 @@ textarea{resize:vertical;min-height:72px}
     { id: "cookie", name: "Cookie", kcal: 80, perG: null, unit: "piece", aliases: ["cookies", "biscuit", "biscuits"], warn: "Brand matters (Parle-G ≠ homemade)." },
     { id: "eggs", name: "Egg", kcal: 70, perG: null, unit: "piece", aliases: ["eggs", "boiled egg"] },
     { id: "banana", name: "Banana", kcal: 105, perG: null, unit: "piece", aliases: [] },
-    { id: "yogurt", name: "Yogurt / curd", kcal: 100, perG: 0.6, unit: "bowl", aliases: ["curd", "dahi", "yoghurt"] },
+    { id: "yogurt", name: "Yogurt / curd", kcal: 100, perG: 0.6, unit: "bowl", aliases: ["curd", "dahi", "yoghurt", "yogurt", "greek yogurt"] },
     { id: "paneer", name: "Paneer", kcal: 265, perG: 2.65, unit: "serving", aliases: [] },
     { id: "chicken", name: "Chicken", kcal: 165, perG: 1.65, unit: "serving", aliases: ["chicken breast"] },
     { id: "salad", name: "Salad", kcal: 80, perG: null, unit: "bowl", aliases: [] },
@@ -325,6 +325,11 @@ textarea{resize:vertical;min-height:72px}
     { id: "chia", name: "Chia seeds", kcal: 50, perG: 4.86, unit: "serving", aliases: ["chia seed", "chia", "chia seeds"] },
     { id: "almonds", name: "Almonds", kcal: 160, perG: 5.8, unit: "handful", aliases: ["almond"] },
     { id: "milk", name: "Milk", kcal: 150, perG: 0.64, unit: "cup", aliases: ["whole milk"] },
+    { id: "chickpeas", name: "Chickpeas (cooked)", kcal: 160, perG: 1.64, unit: "serving", aliases: ["chickpea", "chana", "chole", "kabuli chana", "garbanzo", "garbanzo beans"] },
+    { id: "onion", name: "Onion", kcal: 40, perG: 0.4, unit: "serving", aliases: ["onions"] },
+    { id: "broccoli", name: "Broccoli", kcal: 35, perG: 0.34, unit: "serving", aliases: ["brocoli"] },
+    { id: "french-beans", name: "French beans", kcal: 30, perG: 0.31, unit: "serving", aliases: ["french bean", "green beans", "green bean", "beans", "haricot verts"] },
+    { id: "yogurt-ff", name: "Fat-free yogurt", kcal: 55, perG: 0.55, unit: "cup", aliases: ["fat free yogurt", "fat-free yogurt", "nonfat yogurt", "non fat yogurt", "0% yogurt", "skim yogurt"] },
     { id: "apple", name: "Apple", kcal: 95, perG: null, unit: "piece", aliases: [] }
   ];
 
@@ -771,18 +776,25 @@ textarea{resize:vertical;min-height:72px}
     if (/\b(cooked|steamed)\b/.test(t) && /\brice\b/.test(t)) {
       return allFoods().find(function (f) { return f.id === "rice"; });
     }
-    // strip quantity words leftovers
+    // strip leftover quantity words / trailing junk
     t = t.replace(/\b(pieces?|pcs?|cups?|bowls?|plates?|servings?|scoops?)\b/g, "").trim();
+    t = t.replace(/\b(fat[\s-]?free|non[\s-]?fat|0%|skim)\b/g, "fatfree").trim();
     let best = null;
     let bestScore = -1;
     allFoods().forEach(function (f) {
       const names = [f.id, f.name].concat(f.aliases || []).map(normName);
       names.forEach(function (n) {
         if (!n) return;
+        let nn = n.replace(/\b(fat[\s-]?free|non[\s-]?fat|0%|skim)\b/g, "fatfree");
         let score = -1;
-        if (t === n || t === n.replace(/s$/, "") || n === t.replace(/s$/, "")) score = 100 + n.length;
-        else if (t.indexOf(n) !== -1) score = 80 + n.length;
-        else if (n.indexOf(t) !== -1 && t.length >= 3) score = 60 + t.length;
+        if (t === nn || t === nn.replace(/s$/, "") || nn === t.replace(/s$/, "")) score = 200 + nn.length;
+        else {
+          // whole-word containment beats loose substring (avoids chicken⊂chickpeas issues)
+          const wordRe = new RegExp("(?:^|\\s)" + nn.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&") + "(?:\\s|$)", "i");
+          if (wordRe.test(t)) score = 120 + nn.length;
+          else if (t.indexOf(nn) !== -1 && nn.length >= 4) score = 80 + nn.length;
+          else if (nn.indexOf(t) !== -1 && t.length >= 4) score = 60 + t.length;
+        }
         if (score > bestScore) {
           bestScore = score;
           best = f;
@@ -799,7 +811,7 @@ textarea{resize:vertical;min-height:72px}
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
     const prompt =
       "Parse this meal log into calories. Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), grade (llm|said|grams), warn (short string).\n" +
-      "Rules: use USDA-like densities; cooked vs raw rice matters; if user says which/that is N cal, use that kcal and grade said; be slightly conservative (prefer not underestimating); no markdown.\n" +
+      "Rules: include EVERY food mentioned; split 'onion + broccoli + beans 250g' into items (split grams across them or one mixed-veg line); trailing grams like 'yogurt 100g' count; use USDA-like densities; cooked vs raw rice matters; if user says which/that is N cal, use that kcal and grade said; be slightly conservative (prefer not underestimating); no markdown.\n" +
       "Meal: " + text;
     return fetch(url, {
       method: "POST",
@@ -843,15 +855,23 @@ textarea{resize:vertical;min-height:72px}
     const local = parseChat(raw);
     const s = loadSettings();
     if (!local.unknown.length) return { items: local.items, unknown: [], sourceNote: "local" };
-    if (!s.geminiKey || !s.useLlm) return local;
+    if (!s.geminiKey || !s.useLlm) {
+      return {
+        items: local.items,
+        unknown: local.unknown,
+        sourceNote: "local",
+        llmError: !s.useLlm
+          ? "Gemini is off in Setup — only built-in foods were parsed."
+          : "Add a Gemini API key in Setup so chat can understand free-form meals."
+      };
+    }
     try {
       const llmItems = await parseWithGemini(raw);
       if (!llmItems || !llmItems.length) return local;
-      // Prefer local matched lines; fill gaps from LLM by replacing whole parse when local incomplete
-      if (!local.items.length) {
+      // Free-form meals: prefer full Gemini parse when local missed pieces
+      if (!local.items.length || local.unknown.length) {
         return { items: llmItems, unknown: [], sourceNote: "gemini" };
       }
-      // Merge: keep local items, append LLM items whose names aren't already covered
       const have = {};
       local.items.forEach(function (i) { have[normName(i.name)] = true; });
       const extra = llmItems.filter(function (i) { return !have[normName(i.name)]; });
@@ -873,49 +893,126 @@ textarea{resize:vertical;min-height:72px}
   function parseChat(raw) {
     raw = String(raw || "").replace(/^(i\s+)?(ate|had|log(ged)?)\s+/i, "").trim();
     if (!raw) return { items: [], unknown: [] };
-    const parts = raw.split(/,| and | & |\+/i).map(function (p) { return p.trim(); }).filter(Boolean);
+
+    // Prefer comma splits. Keep "onion + broccoli + beans 250g" as one chunk
+    // so a shared trailing weight is not lost.
+    let parts = raw.split(/\s*,\s*/).map(function (p) { return p.trim(); }).filter(Boolean);
+    const expanded = [];
+    parts.forEach(function (chunk) {
+      if (/\+.+/i.test(chunk) && /(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s*$/i.test(chunk)) {
+        expanded.push(chunk); // veggie mix with shared grams — keep whole
+        return;
+      }
+      if (/\+/.test(chunk)) {
+        chunk.split(/\s*\+\s*/).forEach(function (p) {
+          p = p.trim();
+          if (p) expanded.push(p);
+        });
+        return;
+      }
+      // also split leftover " and "
+      if (/\band\b/i.test(chunk) && !/(\d+(?:\.\d+)?)\s*(g|grams?|gm)/i.test(chunk)) {
+        chunk.split(/\s+and\s+/i).forEach(function (p) {
+          p = p.trim();
+          if (p) expanded.push(p);
+        });
+        return;
+      }
+      expanded.push(chunk);
+    });
+    parts = expanded;
+
     const items = [];
     const unknown = [];
+
+    function pushGrams(f, name, q, chunk, said) {
+      if (!f && said.kcal == null) { unknown.push(chunk); return; }
+      if (said.kcal != null) {
+        items.push({
+          name: f ? f.name : name,
+          detail: q + " g " + (f ? f.name : name) + " · you said " + said.kcal,
+          kcal: said.kcal,
+          grade: "said",
+          warn: "Using the calorie number you typed."
+        });
+        return;
+      }
+      if (f.perG == null) {
+        const qShow2 = Math.round(q * 10) / 10;
+        items.push({
+          name: f.name,
+          detail: qShow2 + " g " + f.name + " (est.)",
+          kcal: Math.round(f.kcal * (q / 100)),
+          grade: "est",
+          warn: "No per-gram density — rough estimate from serving."
+        });
+        return;
+      }
+      const qShow = Math.round(q * 10) / 10;
+      items.push({
+        name: f.name,
+        detail: qShow + " g " + f.name,
+        kcal: Math.round(f.perG * q),
+        grade: "grams",
+        warn: f.id.indexOf("rice") === 0 && !/\b(cooked|raw|uncooked)\b/i.test(chunk)
+          ? "Defaulting to cooked rice density. Say raw/uncooked if weighed dry."
+          : (f.warn || "")
+      });
+    }
+
     parts.forEach(function (chunk) {
       const said = stripSaidKcal(chunk);
-      const work = said.cleaned || chunk;
+      const work = (said.cleaned || chunk).trim();
 
-      let m = work.match(/^(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s+(?:of\s+)?(.+)$/i);
-      if (m) {
-        const f = findFood(m[3]);
-        const q = +m[1];
-        if (!f && said.kcal == null) { unknown.push(chunk); return; }
+      // Shared-weight mix: "onion + broccoli + French beans 250 g"
+      let mix = work.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s*$/i);
+      if (mix && /\+/.test(mix[1])) {
+        const q = +mix[2];
+        const names = mix[1].split(/\s*\+\s*/).map(function (n) { return n.trim(); }).filter(Boolean);
+        const foods = names.map(findFood);
         if (said.kcal != null) {
           items.push({
-            name: f ? f.name : m[3].trim(),
-            detail: q + " g " + (f ? f.name : m[3].trim()) + " · you said " + said.kcal,
+            name: names.join(" + "),
+            detail: q + " g mix · you said " + said.kcal,
             kcal: said.kcal,
             grade: "said",
             warn: "Using the calorie number you typed."
           });
           return;
         }
-        if (f.perG == null) {
-          items.push({
-            name: f.name,
-            detail: q + " g " + f.name + " (est.)",
-            kcal: Math.round(f.kcal * (q / 100)),
-            grade: "est",
-            warn: "No per-gram density — rough estimate from serving."
+        if (foods.every(Boolean)) {
+          // Split grams evenly across known veg
+          const each = q / foods.length;
+          foods.forEach(function (f, idx) {
+            pushGrams(f, names[idx], each, names[idx], { kcal: null });
           });
           return;
         }
+        // Fallback: one mixed-veg line using average leafy/veg density ~0.35
         items.push({
-          name: f.name,
-          detail: q + " g " + f.name,
-          kcal: Math.round(f.perG * q),
-          grade: "grams",
-          warn: f.id.indexOf("rice") === 0 && !/\b(cooked|raw|uncooked)\b/i.test(chunk)
-            ? "Defaulting to cooked rice density. Say raw/uncooked if weighed dry."
-            : (f.warn || "")
+          name: names.join(" + "),
+          detail: q + " g mixed veg",
+          kcal: Math.round(0.35 * q),
+          grade: "est",
+          warn: "Mixed veg estimated (~0.35 kcal/g). Add Gemini in Setup for tighter estimates."
         });
         return;
       }
+
+      // Leading grams: "50g chickpeas" / "50 g rice"
+      let m = work.match(/^(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s+(?:of\s+)?(.+)$/i);
+      if (m) {
+        pushGrams(findFood(m[3]), m[3].trim(), +m[1], chunk, said);
+        return;
+      }
+
+      // Trailing grams: "fat free yogurt 100g" / "French beans 250 g"
+      m = work.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s*$/i);
+      if (m) {
+        pushGrams(findFood(m[1]), m[1].trim(), +m[2], chunk, said);
+        return;
+      }
+
       m = work.match(/^(\d+(?:\.\d+)?)\s*(x|×)?\s*(.+)$/i);
       if (m) {
         const f = findFood(m[3]);
@@ -1492,7 +1589,10 @@ textarea{resize:vertical;min-height:72px}
     }
     try {
       const parsed = await parseChatSmart(raw);
-      if (parsed.llmError) toast("Gemini: " + parsed.llmError);
+      if (parsed.llmError) toast(parsed.llmError.indexOf("Gemini HTTP") === 0 || parsed.llmError.indexOf("Gemini:") === 0 ? parsed.llmError : parsed.llmError);
+      if (parsed.unknown && parsed.unknown.length && (!parsed.items || !parsed.items.length)) {
+        toast("Couldn’t parse that. Add a Gemini key in Setup, or use grams + food names.");
+      }
       confirmMeal({
         items: parsed.items,
         unknown: parsed.unknown,
