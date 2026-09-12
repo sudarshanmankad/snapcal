@@ -312,7 +312,13 @@ textarea{resize:vertical;min-height:72px}
     el.textContent = msg;
     el.classList.add("show");
     clearTimeout(toast._t);
-    toast._t = setTimeout(function () { el.classList.remove("show"); }, 2200);
+    toast._t = setTimeout(function () { el.classList.remove("show"); }, 1800);
+  }
+
+  function hideToast() {
+    const el = document.getElementById("toast");
+    el.classList.remove("show");
+    clearTimeout(toast._t);
   }
 
   function normName(t) {
@@ -524,6 +530,7 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function openSheet(html) {
+    hideToast();
     document.getElementById("sheetBody").innerHTML = html;
     document.getElementById("sheet").classList.remove("hide");
   }
