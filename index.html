@@ -220,6 +220,14 @@ textarea{resize:vertical;min-height:72px}
     <button class="btn light" id="clearMyFoodsBtn" type="button">Clear personal foods</button>
   </div>
   <div class="card">
+    <p class="eyebrow">Your data (this phone)</p>
+    <p class="muted">Meals, dictionary, and settings stay in Safari storage across app updates. We will not rename storage keys or wipe history when shipping features.</p>
+    <p class="tiny" id="dataStatus" style="margin-top:8px"></p>
+    <button class="btn primary" id="backupBtn" type="button">Copy full backup</button>
+    <button class="btn light" id="restoreBtn" type="button">Restore from backup JSON</button>
+    <p class="tiny" style="margin-top:8px">Backup includes history + personal foods + AI settings. Keep a copy in Notes/Files.</p>
+  </div>
+  <div class="card">
     <p class="eyebrow">Accuracy (honest)</p>
     <p class="muted">Label / barcode / weighed grams → high. Chat with counts → good. LLM estimates → helpful but not lab-grade. Plate photo alone → often 20–40% off.</p>
   </div>
@@ -231,8 +239,9 @@ textarea{resize:vertical;min-height:72px}
     <p class="eyebrow">Shortcuts (later)</p>
     <p class="muted">A Shortcut can read Active Energy while unlocked and open <code>?move=420</code>. No HealthKit from the web app without Apple Developer ($99).</p>
   </div>
-  <button class="btn danger" id="clearToday" type="button">Clear today</button>
+  <button class="btn danger" id="clearToday" type="button">Clear today only</button>
   <button class="btn light" id="exportBtn" type="button">Copy today’s JSON</button>
+  <p class="tiny" style="margin:8px 0 0">“Clear today” removes only today’s meals/Move — not other days, not your food dictionary, not your Gemini key.</p>
 </section>
 
 <nav class="tabs" aria-label="Main">
@@ -248,9 +257,12 @@ textarea{resize:vertical;min-height:72px}
 <script>
 (function () {
   const BUDGET = 1800;
-  const KEY = "snapcal-v1";
-  const SETTINGS_KEY = "snapcal-settings";
-  const MYFOODS_KEY = "snapcal-my-foods";
+  // --- On-device storage (PERMANENT keys — do not rename; app updates must not wipe user data) ---
+  const SCHEMA = 2;
+  const KEY = "snapcal-v1";                 // meals + history by day
+  const SETTINGS_KEY = "snapcal-settings";  // Gemini key / prefs
+  const MYFOODS_KEY = "snapcal-my-foods";   // personal food dictionary
+  const LEGACY_DAY_KEYS = ["snapcal-onefile", "snapcal-v0"];
   const FOODS = [
     { id: "idli", name: "Idli", kcal: 70, perG: null, unit: "piece", aliases: ["idly"] },
     { id: "dosa", name: "Dosa", kcal: 120, perG: null, unit: "piece", aliases: [] },
@@ -371,6 +383,14 @@ textarea{resize:vertical;min-height:72px}
         ? "Smart chat on: built-in + your dictionary + Gemini for unknowns. Always confirm before save."
         : "Built-in foods + foods you save. Add a Gemini key in Setup for unknown foods. Always confirm before save.";
     }
+    const status = document.getElementById("dataStatus");
+    if (status) {
+      const days = Object.keys((db && db.days) || {}).length;
+      const meals = Object.keys((db && db.days) || {}).reduce(function (sum, k) {
+        return sum + (((db.days[k] || {}).meals) || []).length;
+      }, 0);
+      status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
+    }
   }
 
   function todayKey(d) {
@@ -385,40 +405,147 @@ textarea{resize:vertical;min-height:72px}
     return { move: 0, workoutAdj: 0, workoutNote: "", meals: [] };
   }
 
+  function normalizeDb(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    if (!raw.days || typeof raw.days !== "object") return null;
+    const days = {};
+    Object.keys(raw.days).forEach(function (k) {
+      const d = raw.days[k] || {};
+      days[k] = {
+        move: d.move || 0,
+        workoutAdj: d.workoutAdj || d.workoutAdj || 0,
+        workoutNote: d.workoutNote || d.workoutNote || "",
+        meals: Array.isArray(d.meals) ? d.meals : []
+      };
+    });
+    return { schema: SCHEMA, days: days };
+  }
+
+  function migrateLegacyDayBlob(old) {
+    if (!old || typeof old !== "object") return null;
+    // Already v1 shape
+    if (old.days) return normalizeDb(old);
+    // Dummy one-file shape: { move, meals }
+    if (Array.isArray(old.meals) || old.move != null) {
+      const days = {};
+      days[todayKey()] = {
+        move: old.move || 0,
+        workoutAdj: 0,
+        workoutNote: "",
+        meals: (old.meals || []).map(function (m) {
+          return {
+            id: uid(),
+            at: Date.now(),
+            source: "chat",
+            items: m.items || m.items || [],
+            photo: null
+          };
+        })
+      };
+      return { schema: SCHEMA, days: days };
+    }
+    return null;
+  }
+
   function loadAll() {
+    // Prefer current key; never wipe on failure — try legacy keys and merge carefully
     try {
       const raw = JSON.parse(localStorage.getItem(KEY));
-      if (raw && raw.days) return raw;
-    } catch (e) {}
-    // migrate old one-file dummy
-    try {
-      const old = JSON.parse(localStorage.getItem("snapcal-onefile"));
-      if (old) {
-        const days = {};
-        days[todayKey()] = {
-          move: old.move || 0,
-          workoutAdj: 0,
-          workoutNote: "",
-          meals: (old.meals || []).map(function (m) {
-            return {
-              id: uid(),
-              at: Date.now(),
-              source: "chat",
-              items: m.items || [],
-              photo: null
-            };
-          })
-        };
-        const next = { days: days };
-        localStorage.setItem(KEY, JSON.stringify(next));
-        return next;
+      const norm = normalizeDb(raw);
+      if (norm) {
+        if (raw.schema !== SCHEMA) {
+          norm.schema = SCHEMA;
+          localStorage.setItem(KEY, JSON.stringify(norm));
+        }
+        return norm;
       }
     } catch (e) {}
-    return { days: {} };
+
+    for (let i = 0; i < LEGACY_DAY_KEYS.length; i++) {
+      try {
+        const old = JSON.parse(localStorage.getItem(LEGACY_DAY_KEYS[i]));
+        const migrated = migrateLegacyDayBlob(old);
+        if (migrated && Object.keys(migrated.days).length) {
+          localStorage.setItem(KEY, JSON.stringify(migrated));
+          // Keep legacy keys as backup — do not delete user history
+          return migrated;
+        }
+      } catch (e) {}
+    }
+    return { schema: SCHEMA, days: {} };
   }
 
   function saveAll(db) {
-    localStorage.setItem(KEY, JSON.stringify(db));
+    const out = normalizeDb(db) || { schema: SCHEMA, days: {} };
+    out.schema = SCHEMA;
+    localStorage.setItem(KEY, JSON.stringify(out));
+  }
+
+  function buildBackup() {
+    return {
+      app: "snapcal",
+      schema: SCHEMA,
+      exportedAt: new Date().toISOString(),
+      days: (loadAll() || {}).days || {},
+      myFoods: loadMyFoods(),
+      settings: loadSettings()
+    };
+  }
+
+  function applyBackup(payload) {
+    if (!payload || typeof payload !== "object") throw new Error("Invalid backup");
+    const daysIn = payload.days || (payload.db && payload.db.days) || null;
+    if (!daysIn || typeof daysIn !== "object") throw new Error("Backup has no days");
+    const current = loadAll();
+    // Merge days: keep both; for same date, prefer backup meals if present, else keep current
+    const merged = { schema: SCHEMA, days: {} };
+    const keys = {};
+    Object.keys(current.days || {}).forEach(function (k) { keys[k] = true; });
+    Object.keys(daysIn).forEach(function (k) { keys[k] = true; });
+    Object.keys(keys).forEach(function (k) {
+      const a = current.days[k];
+      const b = daysIn[k];
+      if (a && b) {
+        const meals = (a.meals || []).concat([]);
+        const seen = {};
+        meals.forEach(function (m) { if (m && m.id) seen[m.id] = true; });
+        (b.meals || []).forEach(function (m) {
+          if (!m) return;
+          if (m.id && seen[m.id]) return;
+          meals.push(m);
+        });
+        merged.days[k] = {
+          move: b.move != null ? b.move : (a.move || 0),
+          workoutAdj: b.workoutAdj != null ? b.workoutAdj : (a.workoutAdj || 0),
+          workoutNote: b.workoutNote != null ? b.workoutNote : (a.workoutNote || ""),
+          meals: meals
+        };
+      } else {
+        merged.days[k] = normalizeDb({ days: { x: b || a } }).days.x;
+      }
+    });
+    saveAll(merged);
+    db = loadAll();
+
+    if (Array.isArray(payload.myFoods) && payload.myFoods.length) {
+      const mine = loadMyFoods();
+      const byName = {};
+      mine.forEach(function (f) { byName[normName(f.name)] = f; });
+      payload.myFoods.forEach(function (f) {
+        if (!f || !f.name) return;
+        const k = normName(f.name);
+        if (!byName[k]) mine.push(f);
+      });
+      saveMyFoods(mine.slice(0, 300));
+    }
+    if (payload.settings && typeof payload.settings === "object") {
+      const cur = loadSettings();
+      saveSettings({
+        geminiKey: payload.settings.geminiKey || cur.geminiKey || "",
+        model: payload.settings.model || cur.model || "gemini-2.0-flash",
+        useLlm: payload.settings.useLlm != null ? payload.settings.useLlm : cur.useLlm
+      });
+    }
   }
 
   function day() {
@@ -1186,9 +1313,9 @@ textarea{resize:vertical;min-height:72px}
 
   document.getElementById("clearToday").onclick = function () {
     openSheet(
-      '<p class="eyebrow">Reset</p><h2 style="margin:4px 0 8px">Clear today?</h2>' +
-      '<p class="muted">Meals, Move, and lifting note for ' + todayKey() + ".</p>" +
-      '<button class="btn danger" id="sheetOk" type="button">Clear today</button>' +
+      '<p class="eyebrow">Reset</p><h2 style="margin:4px 0 8px">Clear today only?</h2>' +
+      '<p class="muted">Removes meals, Move, and lifting note for ' + todayKey() + ". Other days, your food dictionary, and Gemini key stay.</p>" +
+      '<button class="btn danger" id="sheetOk" type="button">Clear today only</button>' +
       '<button class="btn light" id="sheetNo" type="button">Cancel</button>'
     );
     document.getElementById("sheetOk").onclick = function () {
@@ -1209,6 +1336,39 @@ textarea{resize:vertical;min-height:72px}
       });
     } else prompt("Copy JSON", payload);
   };
+
+  document.getElementById("backupBtn").onclick = function () {
+    const payload = JSON.stringify(buildBackup(), null, 2);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(payload).then(function () { toast("Full backup copied"); }).catch(function () {
+        prompt("Copy full backup JSON", payload);
+      });
+    } else prompt("Copy full backup JSON", payload);
+  };
+
+  document.getElementById("restoreBtn").onclick = function () {
+    openSheet(
+      '<p class="eyebrow">Restore</p><h2 style="margin:4px 0 8px">Paste backup JSON</h2>' +
+      '<p class="muted">Merges into existing data on this phone (does not wipe unmatched days).</p>' +
+      '<textarea id="restoreText" rows="8" placeholder="{ ... backup JSON ... }"></textarea>' +
+      '<button class="btn primary" id="sheetOk" type="button">Restore &amp; merge</button>' +
+      '<button class="btn light" id="sheetNo" type="button">Cancel</button>'
+    );
+    document.getElementById("sheetOk").onclick = function () {
+      try {
+        const payload = JSON.parse(document.getElementById("restoreText").value);
+        applyBackup(payload);
+        closeSheet();
+        renderToday();
+        renderSetupAi();
+        toast("Backup restored");
+      } catch (err) {
+        toast("Restore failed: " + (err.message || err));
+      }
+    };
+    document.getElementById("sheetNo").onclick = closeSheet;
+  };
+
 
   function showTab(t) {
     document.getElementById("todayView").classList.toggle("hide", t !== "today");
