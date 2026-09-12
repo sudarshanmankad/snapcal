@@ -16,9 +16,16 @@ Personal calorie tracker PWA for iPhone Home Screen.
 - **Chat log:** counts/grams → confirm → save on device
 - **Smart chat (optional):** built-in starter foods + a **personal dictionary** that learns foods you confirm. Paste a free **Gemini API key** in Setup (stored only on the phone) so unknown foods get an AI estimate — still confirm before save. No API keys in GitHub.
 - **Snap:** plate photo + food chips; label kcal × servings; Fitness Move typed from screenshot
-- **Fitness Move:** chips, typed Active Energy, or Shortcuts `?move=420`
+- **Fitness Move:** chips, typed Active Energy, or **auto-fetch on open** via an iOS Shortcut (reads today’s Active Energy / Move and returns with `?move=`). Web apps cannot call HealthKit directly without a native app + Apple Developer ($99).
 - **Lifting note:** optional conservative adjustment — not stacked as a full second workout on top of Move
 - **History** by day in `localStorage` (this phone only)
+
+### One-time Fitness Shortcut
+1. Shortcuts → new shortcut named **SnapCal Move**
+2. Find Health Samples → **Active Energy** (start of today → now) → Statistics **Sum** → Open URL `https://sudarshanmankad.github.io/snapcal/?move=`*(Sum)*
+3. SnapCal → Setup → enable **Fetch Move automatically when SnapCal opens** → Save
+
+Phone must be unlocked for Health. Use Active Energy / Move — not Health “total.”
 
 ## Honest accuracy
 
