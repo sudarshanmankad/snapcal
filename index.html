@@ -1629,9 +1629,17 @@ textarea{resize:vertical;min-height:72px}
     if (e.target.id === "sheet") closeSheet();
   });
 
-  // service worker
+  // service worker — force update so Home Screen / Safari drop stale shells (e.g. duplicate Paste)
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./sw.js").catch(function () {});
+    navigator.serviceWorker.register("./sw.js").then(function (reg) {
+      try { reg.update(); } catch (e) {}
+    }).catch(function () {});
+    var refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (refreshing) return;
+      refreshing = true;
+      location.reload();
+    });
   }
 
   const gotMove = applyMoveQuery();
