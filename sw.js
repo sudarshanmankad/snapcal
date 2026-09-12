@@ -55,7 +55,7 @@ self.addEventListener("fetch", (event) => {
           return res;
         })
         .catch(() => cached);
-      return network || cached;
+      return cached || network;
     })
   );
 });
