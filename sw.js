@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v8-20260912-clear-auto-steps";
+const CACHE = "snapcal-v9-20260912-homescreen-paste";
 const ASSETS = [
   "./",
   "./index.html",

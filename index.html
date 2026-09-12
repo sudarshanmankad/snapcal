@@ -10,6 +10,17 @@
 <meta name="theme-color" content="#1c1612" />
 <meta name="description" content="Personal calorie tracker. Chat, snap, Fitness Move. 1800 kcal food budget." />
 <link rel="manifest" href="./manifest.webmanifest" />
+<script>
+/* Keep Home Screen + Safari on the same /snapcal/ origin path (no trailing slash = empty storage). */
+(function () {
+  try {
+    var p = location.pathname;
+    if (p === "/snapcal") {
+      location.replace("/snapcal/" + location.search + location.hash);
+    }
+  } catch (e) {}
+})();
+</script>
 <link rel="apple-touch-icon" href="./icons/icon-192.png" />
 <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
 <title>SnapCal</title>
@@ -96,6 +107,7 @@ textarea{resize:vertical;min-height:72px}
     </div>
     <span class="badge" id="budgetBadge">1800 plan</span>
   </div>
+  <div class="note hide" id="storageBanner"></div>
 
   <div class="card" id="budgetCard">
     <div class="row">
@@ -122,8 +134,8 @@ textarea{resize:vertical;min-height:72px}
     </div>
     <div class="chips" id="moveChips" style="margin-top:10px"></div>
     <p class="tiny" style="margin-top:8px" id="moveHint">Watch Active Energy / Move ring (not Health total). Auto-fetch via Shortcuts when enabled in Setup.</p>
-    <button class="btn light" id="fetchMoveTodayBtn" type="button" style="margin-top:8px">Fetch from Fitness</button>
-    <button class="btn light" id="pasteMoveTodayBtn" type="button" style="margin-top:8px">Paste Move</button>
+    <button class="btn primary" id="pasteMoveTodayBtn" type="button" style="margin-top:8px">Paste Move</button>
+    <button class="btn ghost" id="fetchMoveTodayBtn" type="button" style="margin-top:8px">Open Shortcuts</button>
     <div id="workoutBox" style="margin-top:10px">
       <div class="row">
         <p class="muted" style="margin:0">Lifting note (adjustment)</p>
@@ -234,8 +246,9 @@ textarea{resize:vertical;min-height:72px}
     <p class="muted">Label / barcode / weighed grams → high. Chat with counts → good. LLM estimates → helpful but not lab-grade. Plate photo alone → often 20–40% off.</p>
   </div>
   <div class="card">
-    <p class="eyebrow">Install</p>
-    <p class="muted">Safari → Share → Add to Home Screen. Reopen the icon after updates (pull to refresh if needed).</p>
+    <p class="eyebrow">Install (Home Screen)</p>
+    <p class="muted"><b>Important:</b> open <code>https://sudarshanmankad.github.io/snapcal/</code> (with the slash at the end) in Safari, then Share → Add to Home Screen. Delete any old SnapCal icon first.</p>
+    <p class="tiny" style="margin-top:8px">If Home Screen looks empty but Safari has your meals: in Safari open Setup → Copy full backup, then open the Home Screen icon → Setup → Restore. Always use the Home Screen icon after that.</p>
   </div>
   <div class="card">
     <p class="eyebrow">Fitness Move (when unlocked)</p>
@@ -259,10 +272,10 @@ textarea{resize:vertical;min-height:72px}
     <input type="text" id="shortcutName" value="SnapCal Move" />
     <button class="btn primary" id="saveMoveAutoBtn" type="button">Save auto-Move settings</button>
     <button class="btn light" id="fetchMoveBtn" type="button">Fetch Move now</button>
-    <button class="btn light" id="pasteMoveBtn" type="button">Paste Move from clipboard</button>
+    <button class="btn light" id="pasteMoveBtn" type="button">Paste Move</button>
     <button class="btn light" id="copyShortcutStepsBtn" type="button">Copy Shortcut recipe</button>
     <p class="tiny" style="margin-top:8px" id="moveAutoStatus"></p>
-    <p class="tiny" style="margin-top:8px">iPhone may still ask once to allow Paste — after that, open ≈ auto-paste. Tap Paste Move if iOS blocks silent clipboard read.</p>
+    <p class="tiny" style="margin-top:8px">Paste Move opens a box: long-press → Paste once (no second Paste). Or enable auto-read on open after your Shortcut copies Move.</p>
   </div>
   <button class="btn danger" id="clearToday" type="button">Clear today only</button>
   <button class="btn light" id="exportBtn" type="button">Copy today’s JSON</button>
@@ -557,6 +570,75 @@ textarea{resize:vertical;min-height:72px}
     const out = normalizeDb(db) || { schema: SCHEMA, days: {} };
     out.schema = SCHEMA;
     localStorage.setItem(KEY, JSON.stringify(out));
+  }
+
+  function isStandaloneApp() {
+    try {
+      if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
+      if (navigator.standalone) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function requestPersistentStorage() {
+    try {
+      if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persist().catch(function () {});
+      }
+    } catch (e) {}
+  }
+
+  function migrateAlternateStorageKeys() {
+    // Pull data forward if an older build used different key names on this same origin.
+    var altDay = ["snapcal-v1", "snapcal-data", "snapcal-v1"];
+    var altSettings = ["snapcal-settings", "snapcal-settings"];
+    var altFoods = ["snapcal-my-foods", "snapcal-my-foods"];
+    try {
+      if (!localStorage.getItem(KEY)) {
+        for (var i = 0; i < altDay.length; i++) {
+          var raw = localStorage.getItem(altDay[i]);
+          if (!raw) continue;
+          try {
+            var norm = normalizeDb(JSON.parse(raw));
+            if (norm && Object.keys(norm.days || {}).length) {
+              localStorage.setItem(KEY, JSON.stringify(norm));
+              break;
+            }
+          } catch (e) {}
+        }
+      }
+      if (!localStorage.getItem(SETTINGS_KEY)) {
+        for (var j = 0; j < altSettings.length; j++) {
+          if (localStorage.getItem(altSettings[j])) {
+            localStorage.setItem(SETTINGS_KEY, localStorage.getItem(altSettings[j]));
+            break;
+          }
+        }
+      }
+      if (!localStorage.getItem(MYFOODS_KEY)) {
+        for (var k = 0; k < altFoods.length; k++) {
+          if (localStorage.getItem(altFoods[k])) {
+            localStorage.setItem(MYFOODS_KEY, localStorage.getItem(altFoods[k]));
+            break;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  function updateStorageBanner() {
+    var el = document.getElementById("storageBanner");
+    if (!el) return;
+    var db = loadAll();
+    var dayCount = Object.keys((db && db.days) || {}).length;
+    var empty = dayCount === 0;
+    if (isStandaloneApp() && empty) {
+      el.classList.remove("hide");
+      el.innerHTML = "<b>Home Screen looks empty.</b> iPhone sometimes separates Safari and the Home Screen icon. Open this same site in Safari → Setup → <b>Copy full backup</b>, then here → Setup → <b>Restore</b>. Also delete the old icon and re-add from <code>…/snapcal/</code> (with the slash).";
+    } else {
+      el.classList.add("hide");
+      el.innerHTML = "";
+    }
   }
 
   function buildBackup() {
@@ -903,6 +985,8 @@ textarea{resize:vertical;min-height:72px}
     } catch (e) { return ""; }
   }
 
+  migrateAlternateStorageKeys();
+  requestPersistentStorage();
   let db = loadAll();
   let snapMode = "plate";
   let snapPhotoData = null;
@@ -1456,9 +1540,33 @@ textarea{resize:vertical;min-height:72px}
     fetchMoveViaShortcut("manual");
   };
 
-  function onPasteMove() {
-    tryClipboardMove(false);
+  function openPasteMoveSheet() {
+    openSheet(
+      '<p class="eyebrow">Paste Move</p>' +
+      '<h2 style="margin:4px 0 8px">One paste</h2>' +
+      '<p class="muted">Long-press the box → Paste. SnapCal reads it automatically — no second Paste tap.</p>' +
+      '<textarea id="movePasteBox" rows="4" placeholder="Long-press here → Paste\n(e.g. 192.583 Cal)"></textarea>' +
+      '<button class="btn primary" id="sheetApplyMove" type="button">Use this Move</button>' +
+      '<button class="btn light" id="sheetTryClip" type="button">Read clipboard instead</button>' +
+      '<button class="btn ghost" id="sheetNo" type="button">Cancel</button>'
+    );
+    var box = document.getElementById("movePasteBox");
+    function applyFromBox() {
+      var ok = applyClipboardMoveText(box.value, false);
+      if (ok) closeSheet();
+    }
+    box.addEventListener("paste", function () { setTimeout(applyFromBox, 0); });
+    box.addEventListener("input", function () {
+      if (parseMovePayload(box.value) != null) applyFromBox();
+    });
+    document.getElementById("sheetApplyMove").onclick = applyFromBox;
+    document.getElementById("sheetTryClip").onclick = function () {
+      tryClipboardMove(false).then(function (ok) { if (ok) closeSheet(); });
+    };
+    document.getElementById("sheetNo").onclick = closeSheet;
+    setTimeout(function () { try { box.focus(); } catch (e) {} }, 120);
   }
+  function onPasteMove() { openPasteMoveSheet(); }
   var pasteA = document.getElementById("pasteMoveBtn");
   var pasteB = document.getElementById("pasteMoveTodayBtn");
   if (pasteA) pasteA.onclick = onPasteMove;
@@ -1652,6 +1760,7 @@ textarea{resize:vertical;min-height:72px}
         closeSheet();
         renderToday();
         renderSetupAi();
+        updateStorageBanner();
         toast("Backup restored");
       } catch (err) {
         toast("Restore failed: " + (err.message || err));
@@ -1701,6 +1810,7 @@ textarea{resize:vertical;min-height:72px}
   renderSnapFoodChips();
   renderSetupAi();
   renderToday();
+  updateStorageBanner();
   if (!gotMove) maybeAutoFetchMove();
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") maybeAutoFetchMove();

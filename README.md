@@ -4,6 +4,8 @@ Personal calorie tracker PWA for iPhone Home Screen.
 
 **Live:** https://sudarshanmankad.github.io/snapcal/
 
+**Home Screen:** Always add from the URL **with the trailing slash** (`…/snapcal/`). If the icon looks empty but Safari has data, use Setup → backup in Safari, then Restore on the Home Screen icon.
+
 ## Install (no App Store)
 
 1. Safari → open the live URL  
