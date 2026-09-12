@@ -332,7 +332,9 @@ textarea{resize:vertical;min-height:72px}
     { id: "chia", name: "Chia seeds", kcal: 50, perG: 4.86, unit: "serving", aliases: ["chia seed", "chia", "chia seeds"] },
     { id: "almonds", name: "Almonds", kcal: 160, perG: 5.8, unit: "handful", aliases: ["almond"] },
     { id: "milk", name: "Milk", kcal: 150, perG: 0.64, unit: "cup", aliases: ["whole milk"] },
-    { id: "chickpeas", name: "Chickpeas (cooked)", kcal: 160, perG: 1.64, unit: "serving", aliases: ["chickpea", "chana", "chole", "kabuli chana", "garbanzo", "garbanzo beans"] },
+    { id: "chickpeas", name: "Chickpeas (cooked)", kcal: 160, perG: 1.64, unit: "serving", aliases: ["chickpea", "chana", "chole", "kabuli chana", "garbanzo", "garbanzo beans", "cooked chickpeas", "boiled chickpeas"] },
+    { id: "chickpeas-raw", name: "Chickpeas (raw/uncooked)", kcal: 364, perG: 3.64, unit: "serving", aliases: ["raw chickpeas", "uncooked chickpeas", "dry chickpeas", "dried chickpeas", "raw chana", "uncooked chana"] },
+    { id: "cantaloupe", name: "Cantaloupe", kcal: 34, perG: 0.34, unit: "serving", aliases: ["canteloupe", "muskmelon", "musk melon", "rockmelon", "melon"] },
     { id: "onion", name: "Onion", kcal: 40, perG: 0.4, unit: "serving", aliases: ["onions"] },
     { id: "broccoli", name: "Broccoli", kcal: 35, perG: 0.34, unit: "serving", aliases: ["brocoli"] },
     { id: "french-beans", name: "French beans", kcal: 30, perG: 0.31, unit: "serving", aliases: ["french bean", "green beans", "green bean", "beans", "haricot verts"] },
@@ -783,13 +785,21 @@ textarea{resize:vertical;min-height:72px}
     let t = normName(raw);
     t = t.replace(/^(of|a|an|the)\s+/, "");
     t = stripSaidKcal(t).cleaned;
-    // cooked/raw rice cues
-    if (/\b(raw|uncooked)\b/.test(t) && /\brice\b/.test(t)) {
+    // cooked/raw cues (rice, chickpeas)
+    if (/\b(raw|uncooked|dry|dried)\b/.test(t) && /\brice\b/.test(t)) {
       return allFoods().find(function (f) { return f.id === "rice-raw"; });
     }
     if (/\b(cooked|steamed)\b/.test(t) && /\brice\b/.test(t)) {
       return allFoods().find(function (f) { return f.id === "rice"; });
     }
+    if (/\b(raw|uncooked|dry|dried)\b/.test(t) && /\b(chickpeas?|chana|garbanzo)\b/.test(t)) {
+      return allFoods().find(function (f) { return f.id === "chickpeas-raw"; });
+    }
+    if (/\b(cooked|boiled)\b/.test(t) && /\b(chickpeas?|chana|garbanzo)\b/.test(t)) {
+      return allFoods().find(function (f) { return f.id === "chickpeas"; });
+    }
+    // drop prep words / "wt" so matching still works
+    t = t.replace(/\b(raw|uncooked|cooked|steamed|boiled|dry|dried|wt|weight)\b/g, " ").replace(/\s+/g, " ").trim();
     // strip leftover quantity words / trailing junk
     t = t.replace(/\b(pieces?|pcs?|cups?|bowls?|plates?|servings?|scoops?)\b/g, "").trim();
     t = t.replace(/\b(fat[\s-]?free|non[\s-]?fat|0%|skim)\b/g, "fatfree").trim();
@@ -913,7 +923,7 @@ textarea{resize:vertical;min-height:72px}
     let parts = raw.split(/\s*,\s*/).map(function (p) { return p.trim(); }).filter(Boolean);
     const expanded = [];
     parts.forEach(function (chunk) {
-      if (/\+.+/i.test(chunk) && /(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s*$/i.test(chunk)) {
+      if (/\+/i.test(chunk) && /(\d+(?:\.\d+)?)\s*(g|grams?|gm)\b/i.test(chunk)) {
         expanded.push(chunk); // veggie mix with shared grams — keep whole
         return;
       }
@@ -968,9 +978,13 @@ textarea{resize:vertical;min-height:72px}
         detail: qShow + " g " + f.name,
         kcal: Math.round(f.perG * q),
         grade: "grams",
-        warn: f.id.indexOf("rice") === 0 && !/\b(cooked|raw|uncooked)\b/i.test(chunk)
-          ? "Defaulting to cooked rice density. Say raw/uncooked if weighed dry."
-          : (f.warn || "")
+        warn: (function () {
+          if (f.id === "rice" && !/\b(cooked|raw|uncooked)\b/i.test(chunk))
+            return "Defaulting to cooked rice density. Say raw/uncooked if weighed dry.";
+          if (f.id === "chickpeas" && !/\b(cooked|raw|uncooked|dry|dried)\b/i.test(chunk))
+            return "Defaulting to cooked chickpeas. Say raw/uncooked if weighed dry.";
+          return f.warn || "";
+        })()
       });
     }
 
@@ -978,52 +992,57 @@ textarea{resize:vertical;min-height:72px}
       const said = stripSaidKcal(chunk);
       const work = (said.cleaned || chunk).trim();
 
-      // Shared-weight mix: "onion + broccoli + French beans 250 g"
-      let mix = work.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s*$/i);
-      if (mix && /\+/.test(mix[1])) {
-        const q = +mix[2];
-        const names = mix[1].split(/\s*\+\s*/).map(function (n) { return n.trim(); }).filter(Boolean);
-        const foods = names.map(findFood);
-        if (said.kcal != null) {
+      // Pull grams from anywhere: "uncooked 50g chickpeas", "beans 250 g uncooked"
+      function splitGrams(text) {
+        const mm = String(text).match(/(\d+(?:\.\d+)?)\s*(g|grams?|gm)\b/i);
+        if (!mm) return null;
+        const q = +mm[1];
+        const name = String(text)
+          .replace(mm[0], " ")
+          .replace(/\b(wt|weight)\b/gi, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        return { q: q, name: name };
+      }
+
+      // Shared-weight mix: "onion + broccoli + French beans 250 g uncooked"
+      if (/\+/.test(work)) {
+        const g = splitGrams(work);
+        if (g) {
+          const names = g.name.split(/\s*\+\s*/).map(function (n) { return n.trim(); }).filter(Boolean);
+          const foods = names.map(findFood);
+          if (said.kcal != null) {
+            items.push({
+              name: names.join(" + "),
+              detail: g.q + " g mix · you said " + said.kcal,
+              kcal: said.kcal,
+              grade: "said",
+              warn: "Using the calorie number you typed."
+            });
+            return;
+          }
+          if (foods.every(Boolean)) {
+            const each = g.q / foods.length;
+            foods.forEach(function (f, idx) {
+              pushGrams(f, names[idx], each, names[idx] + " " + work, { kcal: null });
+            });
+            return;
+          }
           items.push({
             name: names.join(" + "),
-            detail: q + " g mix · you said " + said.kcal,
-            kcal: said.kcal,
-            grade: "said",
-            warn: "Using the calorie number you typed."
+            detail: g.q + " g mixed veg",
+            kcal: Math.round(0.35 * g.q),
+            grade: "est",
+            warn: "Mixed veg estimated (~0.35 kcal/g)."
           });
           return;
         }
-        if (foods.every(Boolean)) {
-          // Split grams evenly across known veg
-          const each = q / foods.length;
-          foods.forEach(function (f, idx) {
-            pushGrams(f, names[idx], each, names[idx], { kcal: null });
-          });
-          return;
-        }
-        // Fallback: one mixed-veg line using average leafy/veg density ~0.35
-        items.push({
-          name: names.join(" + "),
-          detail: q + " g mixed veg",
-          kcal: Math.round(0.35 * q),
-          grade: "est",
-          warn: "Mixed veg estimated (~0.35 kcal/g). Add Gemini in Setup for tighter estimates."
-        });
-        return;
       }
 
-      // Leading grams: "50g chickpeas" / "50 g rice"
-      let m = work.match(/^(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s+(?:of\s+)?(.+)$/i);
-      if (m) {
-        pushGrams(findFood(m[3]), m[3].trim(), +m[1], chunk, said);
-        return;
-      }
-
-      // Trailing grams: "fat free yogurt 100g" / "French beans 250 g"
-      m = work.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s*$/i);
-      if (m) {
-        pushGrams(findFood(m[1]), m[1].trim(), +m[2], chunk, said);
+      // Any single food with grams anywhere in the phrase
+      const gOne = splitGrams(work);
+      if (gOne && gOne.name) {
+        pushGrams(findFood(gOne.name), gOne.name, gOne.q, chunk, said);
         return;
       }
 
