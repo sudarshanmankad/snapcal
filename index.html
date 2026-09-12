@@ -216,9 +216,14 @@ textarea{resize:vertical;min-height:72px}
     <p class="eyebrow">Smart chat (optional)</p>
     <p class="muted">Built-in list is a starter. Your phone also learns foods you confirm. Chat is not fully smart until you paste a free <b>Gemini API key</b> — then it can read free-form meals. For unknown foods, paste a free <b>Gemini API key</b> — stored only on this phone, never in GitHub.</p>
     <label class="tiny" style="display:block;margin-top:10px">Gemini API key</label>
-    <input type="password" id="geminiKey" autocomplete="off" placeholder="AIza…" />
+    <div class="row" style="gap:8px;align-items:center">
+      <input type="password" id="geminiKey" autocomplete="off" placeholder="AIza…" style="flex:1;margin:0" />
+      <button class="btn light" id="toggleKeyBtn" type="button" style="width:auto;margin:0;padding:10px 12px">Show</button>
+    </div>
+    <p class="tiny" style="margin-top:6px">Hidden like a password is normal. Tap Show to check it starts with <code>AIza</code>, then Save.</p>
     <label class="tiny" style="display:block;margin-top:8px">Model</label>
-    <input type="text" id="geminiModel" value="gemini-2.0-flash" />
+    <input type="text" id="geminiModel" value="gemini-2.5-flash" />
+    <p class="tiny" style="margin-top:4px">Use <code>gemini-2.5-flash</code> (free). Old <code>gemini-2.0-flash</code> is shut down.</p>
     <label class="row" style="margin-top:10px;gap:10px">
       <input type="checkbox" id="useLlm" checked style="width:auto" />
       <span class="tiny" style="color:var(--ink)">Use Gemini when chat has unmatched foods</span>
@@ -335,13 +340,20 @@ textarea{resize:vertical;min-height:72px}
     { id: "apple", name: "Apple", kcal: 95, perG: null, unit: "piece", aliases: [] }
   ];
 
+  function migrateGeminiModel(model) {
+    var m = String(model || "").trim() || "gemini-2.5-flash";
+    // gemini-2.0-flash was shut down (June 2026)
+    if (/^gemini-2\.0-flash/.test(m)) return "gemini-2.5-flash";
+    return m;
+  }
+
   function loadSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
       if (s && typeof s === "object") {
         return {
           geminiKey: s.geminiKey || "",
-          model: s.model || "gemini-2.0-flash",
+          model: migrateGeminiModel(s.model || "gemini-2.5-flash"),
           useLlm: s.useLlm !== false,
           autoMove: !!s.autoMove,
           shortcutName: s.shortcutName || "SnapCal Move",
@@ -353,7 +365,7 @@ textarea{resize:vertical;min-height:72px}
     } catch (e) {}
     return {
       geminiKey: "",
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       useLlm: true,
       autoMove: false,
       shortcutName: "SnapCal Move",
@@ -369,7 +381,7 @@ textarea{resize:vertical;min-height:72px}
     })();
     const next = {
       geminiKey: s.geminiKey != null ? s.geminiKey : (cur.geminiKey || ""),
-      model: s.model != null ? s.model : (cur.model || "gemini-2.0-flash"),
+      model: s.model != null ? s.model : (cur.model || "gemini-2.5-flash"),
       useLlm: s.useLlm != null ? s.useLlm : (cur.useLlm !== false),
       autoMove: s.autoMove != null ? !!s.autoMove : !!cur.autoMove,
       shortcutName: s.shortcutName != null ? s.shortcutName : (cur.shortcutName || "SnapCal Move"),
@@ -444,7 +456,7 @@ textarea{resize:vertical;min-height:72px}
     const modelEl = document.getElementById("geminiModel");
     const useEl = document.getElementById("useLlm");
     if (keyEl) keyEl.value = s.geminiKey || "";
-    if (modelEl) modelEl.value = s.model || "gemini-2.0-flash";
+    if (modelEl) modelEl.value = s.model || "gemini-2.5-flash";
     if (useEl) useEl.checked = s.useLlm !== false;
     const n = loadMyFoods().length;
     const countEl = document.getElementById("myFoodsCount");
@@ -709,7 +721,7 @@ textarea{resize:vertical;min-height:72px}
       const cur = loadSettings();
       saveSettings({
         geminiKey: payload.settings.geminiKey || cur.geminiKey || "",
-        model: payload.settings.model || cur.model || "gemini-2.0-flash",
+        model: payload.settings.model || cur.model || "gemini-2.5-flash",
         useLlm: payload.settings.useLlm != null ? payload.settings.useLlm : cur.useLlm
       });
     }
@@ -809,7 +821,7 @@ textarea{resize:vertical;min-height:72px}
   function parseWithGemini(text) {
     const s = loadSettings();
     if (!s.geminiKey || !s.useLlm) return Promise.resolve(null);
-    const model = encodeURIComponent(s.model || "gemini-2.0-flash");
+    const model = encodeURIComponent(migrateGeminiModel(s.model || "gemini-2.5-flash"));
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
     const prompt =
       "Parse this meal log into calories. Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), grade (llm|said|grams), warn (short string).\n" +
@@ -1609,18 +1621,32 @@ textarea{resize:vertical;min-height:72px}
   document.getElementById("saveAiBtn").onclick = function () {
     saveSettings({
       geminiKey: document.getElementById("geminiKey").value.trim(),
-      model: document.getElementById("geminiModel").value.trim() || "gemini-2.0-flash",
+      model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
       useLlm: document.getElementById("useLlm").checked
     });
     renderSetupAi();
     toast(loadSettings().geminiKey ? "AI settings saved on this phone" : "Saved (no key)");
   };
 
+  
+  document.getElementById("toggleKeyBtn").onclick = function () {
+    const inp = document.getElementById("geminiKey");
+    const btn = document.getElementById("toggleKeyBtn");
+    if (!inp || !btn) return;
+    if (inp.type === "password") {
+      inp.type = "text";
+      btn.textContent = "Hide";
+    } else {
+      inp.type = "password";
+      btn.textContent = "Show";
+    }
+  };
+
   document.getElementById("testAiBtn").onclick = async function () {
     // Save current form first so Test uses what you typed
     saveSettings({
       geminiKey: document.getElementById("geminiKey").value.trim(),
-      model: document.getElementById("geminiModel").value.trim() || "gemini-2.0-flash",
+      model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
       useLlm: document.getElementById("useLlm").checked
     });
     renderSetupAi();
@@ -1639,29 +1665,52 @@ textarea{resize:vertical;min-height:72px}
     btn.textContent = "Testing…";
     if (status) status.textContent = "Calling Gemini…";
     try {
-      const model = encodeURIComponent(s.model || "gemini-2.0-flash");
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: "Reply with exactly: OK" }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 16 }
-        })
+      const modelsTry = [];
+      const preferred = migrateGeminiModel(s.model || "gemini-2.5-flash");
+      modelsTry.push(preferred);
+      ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"].forEach(function (m) {
+        if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
       });
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = (data && data.error && data.error.message) || ("HTTP " + res.status);
-        throw new Error(msg);
+      let lastErr = null;
+      let okText = "";
+      let usedModel = preferred;
+      for (let i = 0; i < modelsTry.length; i++) {
+        usedModel = modelsTry[i];
+        if (status) status.textContent = "Calling " + usedModel + "…";
+        const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(usedModel) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: "Reply with exactly: OK" }] }],
+            generationConfig: { temperature: 0, maxOutputTokens: 16 }
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          lastErr = (data && data.error && data.error.message) || ("HTTP " + res.status);
+          // Invalid key — no point trying other models
+          if (/API key|API_KEY|permission|403|401/i.test(lastErr)) break;
+          continue;
+        }
+        okText = ((((data.candidates || [])[0] || {}).content || {}).parts || [])
+          .map(function (p) { return p.text || ""; }).join("").trim();
+        lastErr = null;
+        break;
       }
-      const text = ((((data.candidates || [])[0] || {}).content || {}).parts || [])
-        .map(function (p) { return p.text || ""; }).join("").trim();
-      if (status) status.textContent = "Gemini working ✓ " + (text ? ("Response: " + text.slice(0, 40)) : "");
+      if (lastErr) throw new Error(lastErr);
+      // Persist working model
+      if (usedModel !== s.model) {
+        saveSettings({ model: usedModel });
+        const modelEl = document.getElementById("geminiModel");
+        if (modelEl) modelEl.value = usedModel;
+      }
+      if (status) status.textContent = "Gemini working ✓ (" + usedModel + ")" + (okText ? (" — " + okText.slice(0, 40)) : "");
       toast("Gemini is working");
     } catch (err) {
       const msg = String(err.message || err);
-      if (status) status.textContent = "Gemini failed: " + msg;
-      toast("Gemini failed — check key/model");
+      if (status) status.textContent = "Gemini failed: " + msg + " — Use Show to verify key starts with AIza, then Save & Test again.";
+      toast("Gemini failed — see status under Test");
     } finally {
       btn.disabled = false;
       btn.textContent = "Test Gemini";
@@ -1669,7 +1718,7 @@ textarea{resize:vertical;min-height:72px}
   };
 
   document.getElementById("clearAiBtn").onclick = function () {
-    saveSettings({ geminiKey: "", model: "gemini-2.0-flash", useLlm: true });
+    saveSettings({ geminiKey: "", model: "gemini-2.5-flash", useLlm: true });
     renderSetupAi();
     const st = document.getElementById("aiTestStatus");
     if (st) st.textContent = "";
