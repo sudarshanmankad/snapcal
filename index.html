@@ -240,7 +240,13 @@ textarea{resize:vertical;min-height:72px}
   <div class="card">
     <p class="eyebrow">Fitness Move (when unlocked)</p>
     <p class="muted">SnapCal can’t call HealthKit itself (needs Apple’s $99 native app). Shortcuts can read today’s <b>Active Energy</b> while the phone is <b>unlocked</b>, copy it, then SnapCal picks it up.</p>
-    <p class="oknote" style="margin-top:10px"><b>Hourly (recommended):</b> In Shortcuts → Automation → Time of Day (every hour) → Run your Move Shortcut → turn <b>Ask Before Running</b> <b>OFF</b>. Shortcut should only <b>Copy to Clipboard</b> (don’t open SnapCal every hour). Health still needs the phone unlocked when the automation runs.</p>
+    <p class="oknote" style="margin-top:10px"><b>Auto-copy is not inside SnapCal — it’s in the Shortcuts app Automation tab.</b><br/><br/>
+      1) Keep your existing shortcut that ends with <b>Copy to Clipboard</b> (rename it <b>SnapCal Move</b> if you want).<br/>
+      2) Shortcuts app → bottom <b>Automation</b> → <b>+</b> → <b>Time of Day</b>.<br/>
+      3) Pick a clock time (example 12:00) → <b>Daily</b> → <b>Next</b>.<br/>
+      4) Add action <b>Run Shortcut</b> → choose <b>SnapCal Move</b> (or your copy shortcut) → <b>Done</b>.<br/>
+      5) Open that automation → turn <b>Ask Before Running</b> <b>OFF</b> → confirm <b>Don’t Ask</b>.<br/><br/>
+      Apple has <b>no “every hour” button</b> — make another Time of Day automation for each time you want (e.g. 8:00, 12:00, 16:00, 20:00). Phone must be <b>unlocked</b> for Health to copy.</p>
     <label class="row" style="margin-top:10px;gap:10px">
       <input type="checkbox" id="autoMove" style="width:auto" />
       <span class="tiny">On open: auto-read clipboard for Move</span>
@@ -1039,40 +1045,56 @@ textarea{resize:vertical;min-height:72px}
 
   function shortcutRecipeText() {
     return [
-      "SnapCal Move — Active Energy → clipboard (works while iPhone is unlocked)",
+      "SnapCal Move — clear steps",
       "",
-      "=== Shortcut (run manually or on a schedule) ===",
-      "1. Shortcuts → + (new shortcut)",
-      "2. Find Health Samples",
-      "   • Type: Active Energy (or Active Energy Burned)",
-      "   • Start Date: today / start of day",
-      "   • Unit: cal · Group by: Day · Fill Missing: OFF",
-      "3. Copy to Clipboard  (copies Health Samples — SnapCal parses “192.583 Cal”)",
-      "4. Name exactly: SnapCal Move  (or match Setup → Shortcut name)",
-      "5. First run: allow Health → Active Energy",
+      "PART A — Your copy shortcut (you may already have this)",
+      "1. Open the Shortcuts app (blue icon)",
+      "2. Open your shortcut that has: Find Health Samples → Copy to Clipboard",
+      "3. Optional: tap the name at the top → rename to exactly: SnapCal Move",
+      "4. Fill Missing: OFF",
+      "5. Do NOT add Open URL / open SnapCal in this shortcut",
+      "6. Tap Play once while unlocked to test — clipboard should get today’s Cal number",
       "",
-      "Optional cleaner clipboard text:",
-      "  • Text → SNAPCAL_MOVE:",
-      "  • Combine Text → SNAPCAL_MOVE: + today’s calorie value",
-      "  • Copy to Clipboard that combined text instead",
+      "PART B — Automate that shortcut (this is the missing piece)",
+      "Apple will NOT auto-run a normal shortcut by itself.",
+      "You must create an Automation that runs it on a clock time.",
       "",
-      "=== Hourly auto-copy (does NOT open SnapCal) ===",
-      "1. Shortcuts → Automation → + → Time of Day",
-      "2. Pick a time (or repeat hourly if your iOS shows that) → Run Immediately",
-      "3. Action: Run Shortcut → SnapCal Move",
-      "4. Turn Ask Before Running OFF",
-      "5. Do NOT add Open URLs / open SnapCal here — only refresh clipboard",
+      "1. Open Shortcuts app",
+      "2. Tap Automation at the BOTTOM of the screen (not All Shortcuts)",
+      "3. Tap + (top right)",
+      "4. Tap Time of Day",
+      "5. Choose Time of Day → set e.g. 12:00",
+      "6. Repeat → Daily",
+      "7. Tap Next",
+      "8. Tap New Blank Automation (or Add Action)",
+      "9. Search: Run Shortcut",
+      "10. Tap Run Shortcut",
+      "11. Tap Shortcut → pick SnapCal Move (or your Copy to Clipboard shortcut)",
+      "12. Tap Done",
       "",
-      "Note: when the phone is locked, Health often won’t read. Unlocked hours refresh fine;",
-      "locked hours may skip until the next unlocked run.",
+      "PART C — Make it run without tapping Notify / Run",
+      "1. Back on Automation list, tap the automation you just made",
+      "2. Find Ask Before Running → turn it OFF",
+      "3. Tap Don’t Ask when iPhone confirms",
+      "4. Make sure Enable This Automation is ON",
+      "5. Tap Done",
       "",
-      "=== SnapCal auto-paste ===",
-      "Setup → enable “On open: auto-read clipboard for Move” → Save",
-      "Leave “If clipboard empty, also open Shortcuts” OFF for quiet hourly use",
-      "If iOS asks to Paste once, allow it — then open ≈ auto-paste",
-      "Fallback: tap Paste Move on Today",
+      "PART D — More than once a day (Apple has no “every hour”)",
+      "Repeat PART B for each clock time you want, e.g.:",
+      "  8:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00",
+      "Each automation runs the SAME shortcut.",
       "",
-      "Use Active Energy / Move ring — not Health total (includes resting)."
+      "PART E — SnapCal auto-paste when you open the app",
+      "1. Open SnapCal → Setup",
+      "2. Turn ON: On open: auto-read clipboard for Move",
+      "3. Leave OFF: If clipboard empty, also open Shortcuts",
+      "4. Shortcut name must match (SnapCal Move)",
+      "5. Save auto-Move settings",
+      "",
+      "Limits:",
+      "- If phone is locked at that time, Health often will not copy",
+      "- If iOS asks to Paste in SnapCal once, allow it",
+      "- If auto-paste fails, tap Paste Move once"
     ].join("\n");
   }
 
