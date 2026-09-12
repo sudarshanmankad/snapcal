@@ -123,6 +123,8 @@ textarea{resize:vertical;min-height:72px}
     <div class="chips" id="moveChips" style="margin-top:10px"></div>
     <p class="tiny" style="margin-top:8px" id="moveHint">Watch Active Energy / Move ring (not Health total). Auto-fetch via Shortcuts when enabled in Setup.</p>
     <button class="btn light" id="fetchMoveTodayBtn" type="button" style="margin-top:8px">Fetch from Fitness</button>
+    <button class="btn light" id="pasteMoveTodayBtn" type="button" style="margin-top:8px">Paste Move</button>
+    <button class="btn light" id="pasteMoveTodayBtn" type="button" style="margin-top:8px">Paste Move</button>
     <div id="workoutBox" style="margin-top:10px">
       <div class="row">
         <p class="muted" style="margin:0">Lifting note (adjustment)</p>
@@ -237,20 +239,21 @@ textarea{resize:vertical;min-height:72px}
     <p class="muted">Safari → Share → Add to Home Screen. Reopen the icon after updates (pull to refresh if needed).</p>
   </div>
   <div class="card">
-    <p class="eyebrow">Fitness Move (auto)</p>
-    <p class="muted">Safari/Home Screen apps <b>cannot</b> read Apple Fitness directly. SnapCal opens a one-time iOS Shortcut that reads today’s <b>Active Energy</b> (Move) and returns here with <code>?move=…</code>.</p>
+    <p class="eyebrow">Fitness Move (when unlocked)</p>
+    <p class="muted">SnapCal still can’t call Fitness/HealthKit itself (that needs Apple’s $99 native app). Once your iPhone is <b>unlocked</b>, Shortcuts <b>can</b> read today’s <b>Active Energy</b> (same number as the Fitness Move ring) and hand it to SnapCal.</p>
     <label class="row" style="margin-top:10px;gap:10px">
       <input type="checkbox" id="autoMove" style="width:auto" />
-      <span class="tiny">Fetch Move automatically when SnapCal opens</span>
+      <span class="tiny">On open: pull Move (clipboard first, then Shortcuts)</span>
     </label>
     <label class="tiny" style="display:block;margin-top:8px">Shortcut name (must match exactly)</label>
     <input type="text" id="shortcutName" value="SnapCal Move" />
     <button class="btn primary" id="saveMoveAutoBtn" type="button">Save auto-Move settings</button>
     <button class="btn light" id="fetchMoveBtn" type="button">Fetch Move now</button>
+    <button class="btn light" id="pasteMoveBtn" type="button">Paste Move from clipboard</button>
     <button class="btn light" id="copyShortcutStepsBtn" type="button">Copy Shortcut recipe</button>
     <p class="tiny" style="margin-top:8px" id="moveAutoStatus"></p>
-    <p class="oknote" style="margin-top:8px">Shortcut recipe: Shortcuts → + → add <b>Find Health Samples</b> (Active Energy, start of today → now) → <b>Get Statistics</b> (Sum) → <b>Round Number</b> → <b>Open URLs</b> <code>https://sudarshanmankad.github.io/snapcal/?move=</code> then insert the Sum variable. Allow Health access. Name it <b>SnapCal Move</b>.</p>
-    <p class="tiny">No $99 Apple Developer / HealthKit from the web app. Phone must be unlocked for Health.</p>
+    <p class="oknote" style="margin-top:8px"><b>Quiet handoff (recommended):</b> Shortcut copies <code>SNAPCAL_MOVE:420</code> to the clipboard, then opens SnapCal. SnapCal reads it when unlocked.<br/><br/><b>Or URL handoff:</b> Shortcut opens <code>https://sudarshanmankad.github.io/snapcal/?move=420</code>. Tap “Copy Shortcut recipe” for full steps.</p>
+    <p class="tiny">Health/Active Energy is only available while the phone is unlocked — that’s the constraint, not a SnapCal limitation.</p>
   </div>
   <button class="btn danger" id="clearToday" type="button">Clear today only</button>
   <button class="btn light" id="exportBtn" type="button">Copy today’s JSON</button>
@@ -313,7 +316,8 @@ textarea{resize:vertical;min-height:72px}
           useLlm: s.useLlm !== false,
           autoMove: !!s.autoMove,
           shortcutName: s.shortcutName || "SnapCal Move",
-          lastAutoMoveAt: s.lastAutoMoveAt || 0
+          lastAutoMoveAt: s.lastAutoMoveAt || 0,
+          preferClipboard: s.preferClipboard !== false
         };
       }
     } catch (e) {}
@@ -323,7 +327,8 @@ textarea{resize:vertical;min-height:72px}
       useLlm: true,
       autoMove: false,
       shortcutName: "SnapCal Move",
-      lastAutoMoveAt: 0
+      lastAutoMoveAt: 0,
+      preferClipboard: true
     };
   }
 
@@ -337,7 +342,8 @@ textarea{resize:vertical;min-height:72px}
       useLlm: s.useLlm != null ? s.useLlm : (cur.useLlm !== false),
       autoMove: s.autoMove != null ? !!s.autoMove : !!cur.autoMove,
       shortcutName: s.shortcutName != null ? s.shortcutName : (cur.shortcutName || "SnapCal Move"),
-      lastAutoMoveAt: s.lastAutoMoveAt != null ? s.lastAutoMoveAt : (cur.lastAutoMoveAt || 0)
+      lastAutoMoveAt: s.lastAutoMoveAt != null ? s.lastAutoMoveAt : (cur.lastAutoMoveAt || 0),
+      preferClipboard: s.preferClipboard != null ? !!s.preferClipboard : (cur.preferClipboard !== false)
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
   }
@@ -432,9 +438,9 @@ textarea{resize:vertical;min-height:72px}
     if (snEl) snEl.value = s.shortcutName || "SnapCal Move";
     const ms = document.getElementById("moveAutoStatus");
     if (ms) {
-      if (!s.autoMove) ms.textContent = "Auto-fetch is off. Enable after creating the Shortcut.";
-      else if (s.lastAutoMoveAt) ms.textContent = "Auto-fetch on. Last Fitness pull: " + new Date(s.lastAutoMoveAt).toLocaleString();
-      else ms.textContent = "Auto-fetch on. Will open Shortcuts next time SnapCal launches.";
+      if (!s.autoMove) ms.textContent = "Auto-fetch off. After unlock, Shortcuts can read Active Energy — enable once Shortcut exists.";
+      else if (s.lastAutoMoveAt) ms.textContent = "Auto-fetch on (unlock → Health readable). Last pull: " + new Date(s.lastAutoMoveAt).toLocaleString();
+      else ms.textContent = "Auto-fetch on. On open: try clipboard SNAPCAL_MOVE:…, else open Shortcuts.";
     }
     const mh = document.getElementById("moveHint");
     if (mh) {
@@ -882,21 +888,43 @@ textarea{resize:vertical;min-height:72px}
   let snapPhotoData = null;
   let selectedSnapFoods = {};
 
+  function setMoveKcal(n, source) {
+    const v = Math.max(0, Math.round(+n));
+    if (isNaN(v)) return false;
+    day().move = v;
+    saveAll(db);
+    try { sessionStorage.setItem("snapcal-autofetch", "1"); } catch (e) {}
+    const s = loadSettings();
+    s.lastAutoMoveAt = Date.now();
+    saveSettings(s);
+    toast("Move from " + (source || "Fitness") + ": " + v + " kcal");
+    try { renderToday(); renderSetupAi(); } catch (e) {}
+    return true;
+  }
+
+  function parseMovePayload(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return null;
+    let m = raw.match(/SNAPCAL_MOVE\s*[:=]\s*(\d+(?:\.\d+)?)/i);
+    if (m) return Math.round(+m[1]);
+    m = raw.match(/(?:^|[?&\s])move\s*=\s*(\d+(?:\.\d+)?)/i);
+    if (m) return Math.round(+m[1]);
+    // bare integer only if clearly calorie-sized (avoid OTP / short codes)
+    m = raw.match(/^(\d{2,4})$/);
+    if (m) {
+      const n = +m[1];
+      if (n >= 20 && n <= 2000) return n;
+    }
+    return null;
+  }
+
   function applyMoveQuery() {
     const params = new URLSearchParams(location.search);
     const move = params.get("move");
     if (move != null && move !== "" && !isNaN(+move)) {
-      day().move = Math.max(0, Math.round(+move));
-      saveAll(db);
-      try { sessionStorage.setItem("snapcal-autofetch", "1"); } catch (e) {}
-      const s = loadSettings();
-      s.lastAutoMoveAt = Date.now();
-      saveSettings(s);
-      toast("Move from Fitness: " + day().move + " kcal");
-      // clean URL without losing path under /snapcal/
+      setMoveKcal(move, "Fitness link");
       if (history.replaceState) {
-        const u = location.pathname + location.hash;
-        history.replaceState({}, "", u);
+        history.replaceState({}, "", location.pathname + location.hash);
       }
       return true;
     }
@@ -910,12 +938,33 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function fetchMoveViaShortcut(reason) {
-    // Leaves SnapCal → Shortcuts reads Active Energy → opens back with ?move=
     try { sessionStorage.setItem("snapcal-autofetch", "1"); } catch (e) {}
-    toast(reason === "auto" ? "Opening Fitness via Shortcuts…" : "Opening Shortcuts…");
+    toast(reason === "auto" ? "Phone unlocked → reading Active Energy via Shortcuts…" : "Opening Shortcuts (needs unlock)…");
     setTimeout(function () {
       location.href = shortcutRunUrl();
     }, 250);
+  }
+
+  function applyClipboardMoveText(text, quiet) {
+    const n = parseMovePayload(text);
+    if (n == null) {
+      if (!quiet) toast("No Move number in clipboard. Use SNAPCAL_MOVE:420");
+      return false;
+    }
+    return setMoveKcal(n, "clipboard");
+  }
+
+  function tryClipboardMove(quiet) {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      if (!quiet) toast("Clipboard read needs a Paste tap on iPhone");
+      return Promise.resolve(false);
+    }
+    return navigator.clipboard.readText().then(function (text) {
+      return applyClipboardMoveText(text, quiet);
+    }).catch(function () {
+      if (!quiet) toast("Tap Paste Move (iOS needs a Paste confirm)");
+      return false;
+    });
   }
 
   function maybeAutoFetchMove() {
@@ -925,29 +974,49 @@ textarea{resize:vertical;min-height:72px}
     try {
       if (sessionStorage.getItem("snapcal-autofetch") === "1") return;
     } catch (e) {}
-    // Avoid hammering Shortcuts if we just fetched
     if (s.lastAutoMoveAt && Date.now() - s.lastAutoMoveAt < 90 * 1000) return;
+
+    // Unlocked path #1: Shortcut already left SNAPCAL_MOVE:n on the clipboard
+    if (s.preferClipboard !== false) {
+      tryClipboardMove(true).then(function (ok) {
+        if (ok) return;
+        // Unlocked path #2: jump to Shortcuts so it can read Health now
+        fetchMoveViaShortcut("auto");
+      });
+      return;
+    }
     fetchMoveViaShortcut("auto");
   }
 
   function shortcutRecipeText() {
     return [
-      "SnapCal Move — iOS Shortcut recipe",
+      "SnapCal Move — works when iPhone is unlocked (Health readable then)",
+      "",
+      "Why unlock matters: Apple only exposes Active Energy / Move to Shortcuts while the phone is unlocked. SnapCal itself still cannot call HealthKit (web app).",
       "",
       "1. Open Shortcuts → + (new shortcut)",
-      "2. Add action: Find Health Samples",
+      "2. Add: Find Health Samples",
       "   • Type: Active Energy",
-      "   • Start Date: Start of Day (today)",
-      "   • End Date: Current Date",
-      "3. Add action: Get Statistics for Health Samples → Sum",
-      "4. Add action: Round Number (optional)",
-      "5. Add action: Open URLs",
-      "   URL: https://sudarshanmankad.github.io/snapcal/?move=  (then insert the Sum variable right after =)",
-      "6. Name the shortcut exactly: SnapCal Move",
-      "7. First run: allow Health access (Active Energy)",
-      "8. In SnapCal → Setup → enable “Fetch Move automatically when SnapCal opens” → Save",
+      "   • Start: Start of Day (today)",
+      "   • End: Current Date",
+      "3. Add: Get Statistics for Health Samples → Sum",
+      "4. Add: Round Number (optional)",
       "",
-      "Use Active Energy / Move — not Health “total” (includes resting)."
+      "Quiet handoff (clipboard — recommended):",
+      "5a. Add: Text → SNAPCAL_MOVE:",
+      "5b. Add: Combine Text → SNAPCAL_MOVE: + Sum variable",
+      "5c. Add: Copy to Clipboard",
+      "5d. Add: Open URLs → https://sudarshanmankad.github.io/snapcal/",
+      "",
+      "URL handoff (alternate):",
+      "5'. Add: Open URLs → https://sudarshanmankad.github.io/snapcal/?move=  (insert Sum after =)",
+      "",
+      "6. Name exactly: SnapCal Move",
+      "7. First run: allow Health → Active Energy",
+      "8. SnapCal → Setup → enable auto-fetch → Save",
+      "",
+      "Optional: add the Shortcut to Lock Screen / Home Screen / Action Button so you run it once after unlock.",
+      "Use Active Energy / Move — not Health total (includes resting)."
     ].join("\n");
   }
 
@@ -1305,6 +1374,14 @@ textarea{resize:vertical;min-height:72px}
   document.getElementById("fetchMoveTodayBtn").onclick = function () {
     fetchMoveViaShortcut("manual");
   };
+
+  function onPasteMove() {
+    tryClipboardMove(false);
+  }
+  var pasteA = document.getElementById("pasteMoveBtn");
+  var pasteB = document.getElementById("pasteMoveTodayBtn");
+  if (pasteA) pasteA.onclick = onPasteMove;
+  if (pasteB) pasteB.onclick = onPasteMove;
 
   document.getElementById("copyShortcutStepsBtn").onclick = function () {
     const text = shortcutRecipeText();

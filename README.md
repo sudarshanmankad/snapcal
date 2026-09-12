@@ -20,12 +20,15 @@ Personal calorie tracker PWA for iPhone Home Screen.
 - **Lifting note:** optional conservative adjustment — not stacked as a full second workout on top of Move
 - **History** by day in `localStorage` (this phone only)
 
-### One-time Fitness Shortcut
-1. Shortcuts → new shortcut named **SnapCal Move**
-2. Find Health Samples → **Active Energy** (start of today → now) → Statistics **Sum** → Open URL `https://sudarshanmankad.github.io/snapcal/?move=`*(Sum)*
-3. SnapCal → Setup → enable **Fetch Move automatically when SnapCal opens** → Save
+### Fitness Move when the phone is unlocked
+Apple only exposes Active Energy (Fitness Move) to Shortcuts while the iPhone is **unlocked**. SnapCal can’t call HealthKit itself (web app / no $99 native binary).
 
-Phone must be unlocked for Health. Use Active Energy / Move — not Health “total.”
+1. Create Shortcut **SnapCal Move**: Active Energy today → Sum
+2. Quiet handoff: copy `SNAPCAL_MOVE:` + Sum to clipboard, then open SnapCal  
+   (or open `?move=` + Sum)
+3. SnapCal → Setup → enable auto-fetch → Save
+
+On open, SnapCal reads the clipboard first, then falls back to launching the Shortcut.
 
 ## Honest accuracy
 
