@@ -248,21 +248,23 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny" style="margin-top:8px">Chrome ≠ Safari (separate storage). To move meals: Chrome → Setup → Copy full backup → Safari → Setup → Restore. Then Add to Home Screen from Safari at …/snapcal/ (with the slash). Always use that Home Screen icon afterward.</p>
   </div>
   <div class="card">
-    <p class="eyebrow">Fitness Move (one tap — no Paste)</p>
-    <p class="muted">iPhone always asks <b>Paste</b> if a website reads the clipboard. SnapCal avoids that: <b>Update</b> runs your Shortcut, and the Shortcut opens SnapCal with Move in the link (<code>?move=436</code>) — one tap, no Paste.</p>
-    <p class="oknote" style="margin-top:10px"><b>Shortcut (once) — must put the number in the URL:</b><br/>
-      1) Find Health Samples → Active Energy → today<br/>
+    <p class="eyebrow">Fitness Move (Home Screen app)</p>
+    <p class="muted"><b>Important:</b> Chrome and your Home Screen SnapCal icon do <b>not</b> share data. If the Shortcut uses <b>Open URLs</b>, iPhone opens Chrome and updates Move there — the Home Screen app stays old. Fix: <b>delete Open URLs</b> from the Shortcut.</p>
+    <p class="oknote" style="margin-top:10px"><b>Shortcut (once):</b><br/>
+      1) Find Health Samples → Active Energy → today → Fill Missing <b>OFF</b><br/>
       2) Calculate Statistics → <b>Sum</b><br/>
-      3) Open URLs → <code>https://sudarshanmankad.github.io/snapcal/?move=</code> then insert the <b>Sum</b> variable after <code>move=</code><br/><br/>
-      Name it exactly <b>SnapCal Move</b> (or match the name below). Phone unlocked.<br/><br/>
-      Do <b>not</b> use Copy to Clipboard for Update — that causes the Paste prompt.</p>
+      3) Round Number → Sum → <b>Integer</b><br/>
+      4) <b>Copy to Clipboard</b> → Rounded Number<br/>
+      5) <b>Do not</b> add Open URLs<br/>
+      6) Name exactly <b>SnapCal Move</b><br/><br/>
+      Tap <b>Update</b> from the <b>Home Screen</b> icon → Shortcuts runs → you return here → Move updates. If iPhone asks Paste once, tap Allow.</p>
     <label class="tiny" style="display:block;margin-top:10px">Shortcut name (must match exactly)</label>
     <input type="text" id="shortcutName" value="SnapCal Move" />
     <button class="btn primary" id="saveMoveAutoBtn" type="button">Save shortcut name</button>
     <button class="btn light" id="updateMoveSetupBtn" type="button">Update Move</button>
     <button class="btn light" id="copyShortcutStepsBtn" type="button">Copy Shortcut recipe</button>
     <p class="tiny" style="margin-top:8px" id="moveAutoStatus"></p>
-    <p class="tiny" style="margin-top:8px">If Shortcuts says “not found”, create the shortcut with that exact name. Edit still works for typing Move by hand.</p>
+    <p class="tiny" style="margin-top:8px">Always use the Home Screen SnapCal icon for Update — not a Chrome tab.</p>
   </div>
   <button class="btn danger" id="clearToday" type="button">Clear today only</button>
   <button class="btn light" id="exportBtn" type="button">Copy today’s JSON</button>
@@ -1176,11 +1178,14 @@ textarea{resize:vertical;min-height:72px}
 
   function applyMoveQuery() {
     const params = new URLSearchParams(location.search);
-    const move = params.get("move");
+    const move = params.get("move") != null ? params.get("move") : params.get("result");
     if (move != null && move !== "" && !isNaN(+move)) {
       setMoveKcal(move, "Fitness link");
       if (history.replaceState) {
         history.replaceState({}, "", location.pathname + location.hash);
+      }
+      if (!isStandaloneApp()) {
+        toast("Saved in this browser tab only. Home Screen SnapCal is separate — remove Open URLs from the Shortcut.");
       }
       return true;
     }
@@ -1194,9 +1199,11 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function fetchMoveViaShortcut(reason) {
-    // Shortcut must Open URL …/snapcal/?move=NUMBER (no clipboard → no iOS Paste prompt).
+    // Shortcut should Copy Rounded Number then END (no Open URLs) so iPhone returns to this Home Screen app.
     try { sessionStorage.setItem("snapcal-pending-move", "1"); } catch (e) {}
-    toast(reason === "auto" ? "Refreshing Move via Shortcuts…" : "One tap: Shortcuts opens SnapCal with Move in the link");
+    toast(reason === "auto"
+      ? "Shortcuts… then back here"
+      : "Opening Shortcuts — when it finishes you return here (no Open URLs in the Shortcut)");
     setTimeout(function () {
       location.href = shortcutRunUrl();
     }, 200);
@@ -1225,32 +1232,49 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function maybeAutoFetchMove() {
-    // Never auto-read clipboard — iOS shows a second Paste tap. Move arrives via ?move= from Shortcut.
     if (applyMoveQuery()) return;
+
+    var pending = false;
+    try { pending = sessionStorage.getItem("snapcal-pending-move") === "1"; } catch (e) {}
+    if (!pending) return;
+
+    // Returned from Shortcuts into the same app — apply clipboard Move here (Home Screen storage).
+    function attempt(pass) {
+      tryClipboardMove(pass > 0 ? false : true).then(function (ok) {
+        if (ok) {
+          try { sessionStorage.removeItem("snapcal-pending-move"); } catch (e) {}
+          return;
+        }
+        if (pass < 2) {
+          setTimeout(function () { attempt(pass + 1); }, 500);
+          return;
+        }
+        // Leave pending so next focus can retry; prompt user once
+        toast("Tap Allow Paste if asked — or Edit Move. Delete Open URLs from the Shortcut so you return here.");
+      });
+    }
+    attempt(0);
   }
 
   function shortcutRecipeText() {
     return [
-      "SnapCal Move — one tap, no Paste",
+      "SnapCal Move — updates the Home Screen app (not Chrome)",
       "",
-      "Why: websites cannot read Fitness. Clipboard reads always show iPhone’s Paste button.",
-      "Fix: put today’s Active Energy in the SnapCal link as ?move=",
+      "Why Chrome looked updated: Open URLs opens your default browser (Chrome).",
+      "Chrome and the Home Screen SnapCal icon store data separately.",
       "",
+      "Build this Shortcut:",
       "1. Shortcuts → + → name exactly: SnapCal Move",
-      "2. Add action: Find Health Samples",
-      "   • Type: Active Energy",
-      "   • Start Date: start of today",
-      "   • End Date: now (optional)",
-      "   • Fill Missing: OFF",
-      "3. Add action: Calculate Statistics → Sum",
-      "4. Add action: Open URLs",
-      "   URL: https://sudarshanmankad.github.io/snapcal/?move=",
-      "   Then tap the URL field → Variable → insert Sum right after move=",
-      "   Final example: https://sudarshanmankad.github.io/snapcal/?move=436",
-      "5. Do NOT add Copy to Clipboard",
-      "6. Run once unlocked to test — SnapCal opens and Move sets with no Paste",
+      "2. Find Health Samples → Active Energy → start of today → Fill Missing OFF",
+      "3. Calculate Statistics → Sum",
+      "4. Round Number → Sum → Integer",
+      "5. Copy to Clipboard → Rounded Number",
+      "6. Do NOT add Open URLs (delete it if you already added it)",
+      "7. Save",
       "",
-      "In SnapCal: tap Update (runs this shortcut). Edit = type Move manually."
+      "Use: open SnapCal from the Home Screen icon → tap Update.",
+      "Shortcuts runs, then iPhone returns to SnapCal and Move updates.",
+      "If iPhone asks Paste once, tap Allow."
     ].join("\n");
   }
 
@@ -1680,7 +1704,10 @@ textarea{resize:vertical;min-height:72px}
   };
 
   function onUpdateMove() {
-    // One tap: run Shortcut that returns with ?move= — never clipboard.readText (that forces Paste).
+    // Run Shortcut; it must Copy Move then end (no Open URLs) so we return to this Home Screen app.
+    if (!isStandaloneApp()) {
+      toast("Open SnapCal from the Home Screen icon first — Chrome won’t keep your Move.");
+    }
     fetchMoveViaShortcut("manual");
   }
   var updToday = document.getElementById("updateMoveBtn");
