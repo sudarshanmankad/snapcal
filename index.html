@@ -248,7 +248,7 @@ textarea{resize:vertical;min-height:72px}
   <div class="card">
     <p class="eyebrow">Install (Home Screen)</p>
     <p class="muted"><b>Important:</b> open <code>https://sudarshanmankad.github.io/snapcal/</code> (with the slash at the end) in Safari, then Share → Add to Home Screen. Delete any old SnapCal icon first.</p>
-    <p class="tiny" style="margin-top:8px">If Home Screen looks empty but Safari has your meals: in Safari open Setup → Copy full backup, then open the Home Screen icon → Setup → Restore. Always use the Home Screen icon after that.</p>
+    <p class="tiny" style="margin-top:8px">Chrome ≠ Safari (separate storage). To move meals: Chrome → Setup → Copy full backup → Safari → Setup → Restore. Then Add to Home Screen from Safari at …/snapcal/ (with the slash). Always use that Home Screen icon afterward.</p>
   </div>
   <div class="card">
     <p class="eyebrow">Fitness Move (when unlocked)</p>
@@ -634,7 +634,7 @@ textarea{resize:vertical;min-height:72px}
     var empty = dayCount === 0;
     if (isStandaloneApp() && empty) {
       el.classList.remove("hide");
-      el.innerHTML = "<b>Home Screen looks empty.</b> iPhone sometimes separates Safari and the Home Screen icon. Open this same site in Safari → Setup → <b>Copy full backup</b>, then here → Setup → <b>Restore</b>. Also delete the old icon and re-add from <code>…/snapcal/</code> (with the slash).";
+      el.innerHTML = "<b>No meals here yet.</b> Chrome and Safari keep separate copies. If you see meals in <b>Chrome</b>: Chrome → Setup → <b>Copy full backup</b> → open this page in <b>Safari</b> → Setup → <b>Restore</b>. Home Screen icons use Safari’s copy — always open <code>…/snapcal/</code> (with the slash).";
     } else {
       el.classList.add("hide");
       el.innerHTML = "";

@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v9-20260912-homescreen-paste";
+const CACHE = "snapcal-v10-20260912-chrome-safari";
 const ASSETS = [
   "./",
   "./index.html",
