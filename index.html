@@ -902,9 +902,17 @@ textarea{resize:vertical;min-height:72px}
   let snapPhotoData = null;
   let selectedSnapFoods = {};
 
-  function setMoveKcal(n, source) {
+  function setMoveKcal(n, source, opts) {
     const v = Math.max(0, Math.round(+n));
     if (isNaN(v)) return false;
+    const quietSame = opts && opts.quietSame;
+    const prev = day().move;
+    if (quietSame && prev != null && +prev === v) {
+      const s0 = loadSettings();
+      s0.lastAutoMoveAt = Date.now();
+      saveSettings(s0);
+      return true;
+    }
     day().move = v;
     saveAll(db);
     try { sessionStorage.setItem("snapcal-autofetch", "1"); } catch (e) {}
@@ -993,7 +1001,7 @@ textarea{resize:vertical;min-height:72px}
       if (!quiet) toast("No Move number in clipboard. Run your Shortcut, then Paste Move.");
       return false;
     }
-    return setMoveKcal(n, "clipboard");
+    return setMoveKcal(n, "clipboard", { quietSame: !!quiet });
   }
 
   function tryClipboardMove(quiet) {
