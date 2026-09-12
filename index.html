@@ -124,167 +124,30 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny" style="margin-top:8px">1800 is intake, not net. Move kcal are tracked separately — not added back to food.</p>
   </div>
 
-  <div class="card">
-    <div class="row">
-      <div>
-        <p class="eyebrow">Fitness Move</p>
-        <p class="big" id="move" style="font-size:22px">Not set</p>
-      </div>
-      <button class="chip ghost" id="editMoveBtn" type="button">Edit</button>
-    </div>
-    <div class="chips" id="moveChips" style="margin-top:10px"></div>
-    <p class="tiny" style="margin-top:8px" id="moveHint">Watch Active Energy / Move ring (not Health total). Auto-fetch via Shortcuts when enabled in Setup.</p>
-    <button class="btn primary" id="pasteMoveTodayBtn" type="button" style="margin-top:8px">Paste Move</button>
-    <button class="btn ghost" id="fetchMoveTodayBtn" type="button" style="margin-top:8px">Open Shortcuts</button>
-    <div id="workoutBox" style="margin-top:10px">
-      <div class="row">
-        <p class="muted" style="margin:0">Lifting note (adjustment)</p>
-        <button class="chip ghost" id="editWorkoutBtn" type="button">Add</button>
-      </div>
-      <p class="tiny" id="workoutText">Optional. Fitness Move already includes some gym time — don’t stack a full second workout estimate.</p>
-    </div>
-  </div>
-
-  <div class="card">
-    <p class="eyebrow">Chat log</p>
-    <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed"></textarea>
-    <button class="btn primary" id="logBtn" type="button">Parse &amp; confirm</button>
-    <div class="chips" id="quick" style="margin-top:10px"></div>
-    <p class="tiny" style="margin-top:8px" id="chatHint">With a Gemini key in Setup, chat estimates any meal from your sentence (kcal + macros) — not a fixed food list. Always confirm before save.</p>
-  </div>
-
-  <div class="card">
-    <div class="row"><b>Today’s meals</b><span class="muted" id="count">0</span></div>
-    <div id="meals"></div>
-  </div>
-</main>
-
-<section id="snapView" class="panel hide">
-  <p class="eyebrow">Camera</p>
-  <h1 style="margin:4px 0 8px;font-size:28px">Snap</h1>
-  <p class="muted">Photos help you remember. Calories still need your confirm — plate photos are not barcode-grade.</p>
-
-  <div class="seg" id="snapMode">
-    <button type="button" class="on" data-mode="plate">Plate</button>
-    <button type="button" data-mode="label">Label</button>
-    <button type="button" data-mode="fitness">Fitness</button>
-  </div>
-
-  <div class="card" id="snapCard">
-    <p class="muted" id="snapHint">Plate: attach a photo, then pick foods. Estimate only — confirm before save.</p>
-    <button class="btn light filebtn" type="button">
-      Take / choose photo
-      <input id="cam" type="file" accept="image/*" capture="environment" />
-    </button>
-    <div class="preview-wrap hide" id="previewWrap"><img id="preview" alt="Selected photo preview" /></div>
-    <div id="snapActions" class="hide" style="margin-top:10px">
-      <div class="chips" id="snapFoods"></div>
-      <div id="labelFields" class="hide" style="margin-top:10px">
-        <label class="tiny">Calories per serving (from label)</label>
-        <input type="number" id="labelKcal" inputmode="numeric" placeholder="e.g. 120" />
-        <label class="tiny" style="display:block;margin-top:8px">Servings eaten</label>
-        <input type="number" id="labelServings" inputmode="decimal" step="0.1" value="1" />
-        <p class="oknote">Label + servings ≈ source of truth for packaged food.</p>
-      </div>
-      <div id="fitnessFields" class="hide" style="margin-top:10px">
-        <label class="tiny">Move / Active Energy (kcal)</label>
-        <input type="number" id="fitKcal" inputmode="numeric" placeholder="e.g. 420" />
-        <p class="note">No OCR yet. Type the Move number from the screenshot. Or open SnapCal with ?move=420 from Shortcuts later.</p>
-      </div>
-      <button class="btn primary" id="snapConfirm" type="button">Review &amp; save</button>
-      <button class="btn ghost" id="snapClear" type="button">Clear photo</button>
-    </div>
-  </div>
-</section>
-
-<section id="historyView" class="panel hide">
-  <p class="eyebrow">Log</p>
-  <h1 style="margin:4px 0 8px;font-size:28px">History</h1>
-  <p class="muted">On this phone only. Today first; older days keep their totals.</p>
-  <div id="historyList"></div>
-</section>
-
-<section id="setupView" class="panel hide">
-  <p class="eyebrow">Settings</p>
-  <h1 style="margin:4px 0 8px;font-size:28px">Setup</h1>
-  <div class="card">
-    <p class="eyebrow">Daily food budget</p>
-    <p class="big" style="font-size:22px">1800 kcal</p>
-    <p class="tiny">Intake target. Workouts do not auto-increase this.</p>
-  </div>
-  <div class="card">
-    <p class="eyebrow">Smart chat (optional)</p>
-    <p class="muted">Paste a free <b>Gemini API key</b> and chat becomes LLM-first: your sentence → estimated foods with kcal + protein/carbs/fat. No fixed catalog. Key stays on this phone only, never in GitHub. Quick chips still use the built-in list as a shortcut.</p>
-    <label class="tiny" style="display:block;margin-top:10px">Gemini API key</label>
-    <div class="row" style="gap:8px;align-items:center">
-      <input type="password" id="geminiKey" autocomplete="off" placeholder="AIza…" style="flex:1;margin:0" />
-      <button class="btn light" id="toggleKeyBtn" type="button" style="width:auto;margin:0;padding:10px 12px">Show</button>
-    </div>
-    <p class="tiny" style="margin-top:6px">Hidden like a password is normal. Tap Show to check it starts with <code>AIza</code>, then Save.</p>
-    <label class="tiny" style="display:block;margin-top:8px">Model</label>
-    <input type="text" id="geminiModel" value="gemini-2.5-flash" />
-    <p class="tiny" style="margin-top:4px">Use <code>gemini-2.5-flash</code> (free). Old <code>gemini-2.0-flash</code> is shut down.</p>
+    <div class="card">
+    <p class="eyebrow">Fitness Move (no Paste tap)</p>
+    <p class="muted">SnapCal can’t read Fitness by itself. Your Shortcut <b>copies</b> today’s <b>Active Energy</b>; SnapCal <b>auto-reads the clipboard when you open the app</b> — no long-press Paste.</p>
+    <p class="oknote" style="margin-top:10px"><b>Shortcut (once):</b> Find Health Samples (Active Energy, today) → <b>Copy to Clipboard</b> → <b>Open URL</b> <code>https://sudarshanmankad.github.io/snapcal/</code><br/><br/>
+      Name it exactly <b>SnapCal Move</b>. Phone must be unlocked when it runs.<br/><br/>
+      <b>Optional schedule:</b> Automation → Time of Day → Run Shortcut → SnapCal Move → Ask Before Running <b>OFF</b>. For schedule-only you can omit Open URL (just Copy) — SnapCal picks it up next open.</p>
     <label class="row" style="margin-top:10px;gap:10px">
-      <input type="checkbox" id="useLlm" checked style="width:auto" />
-      <span class="tiny" style="color:var(--ink)">Use Gemini for chat (LLM-first meal estimates)</span>
-    </label>
-    <button class="btn primary" id="saveAiBtn" type="button">Save AI settings</button>
-    <button class="btn light" id="testAiBtn" type="button">Test Gemini</button>
-    <button class="btn light" id="clearAiBtn" type="button">Remove key</button>
-    <p class="tiny" style="margin-top:8px" id="aiTestStatus"></p>
-    <p class="tiny" style="margin-top:8px">Get a key: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> (keys usually start with <code>AIza</code>). Free tier is enough for meal chat. Key stays in Safari localStorage.</p>
-  </div>
-  <div class="card">
-    <p class="eyebrow">Your food dictionary</p>
-    <p class="muted" id="myFoodsCount">0 personal foods on this phone.</p>
-    <p class="tiny">Grows when you save meals. Used for quick chips / offline fallback — not for Gemini chat.</p>
-    <button class="btn light" id="clearMyFoodsBtn" type="button">Clear personal foods</button>
-  </div>
-  <div class="card">
-    <p class="eyebrow">Your data (this phone)</p>
-    <p class="muted">Meals, dictionary, and settings stay in Safari storage across app updates. We will not rename storage keys or wipe history when shipping features.</p>
-    <p class="tiny" id="dataStatus" style="margin-top:8px"></p>
-    <button class="btn primary" id="backupBtn" type="button">Copy full backup</button>
-    <button class="btn light" id="restoreBtn" type="button">Restore from backup JSON</button>
-    <p class="tiny" style="margin-top:8px">Backup includes history + personal foods + AI settings. Keep a copy in Notes/Files.</p>
-  </div>
-  <div class="card">
-    <p class="eyebrow">Accuracy (honest)</p>
-    <p class="muted">Label / barcode / weighed grams → high. Chat with counts → good. LLM estimates → helpful but not lab-grade. Plate photo alone → often 20–40% off.</p>
-  </div>
-  <div class="card">
-    <p class="eyebrow">Install (Home Screen)</p>
-    <p class="muted"><b>Important:</b> open <code>https://sudarshanmankad.github.io/snapcal/</code> (with the slash at the end) in Safari, then Share → Add to Home Screen. Delete any old SnapCal icon first.</p>
-    <p class="tiny" style="margin-top:8px">Chrome ≠ Safari (separate storage). To move meals: Chrome → Setup → Copy full backup → Safari → Setup → Restore. Then Add to Home Screen from Safari at …/snapcal/ (with the slash). Always use that Home Screen icon afterward.</p>
-  </div>
-  <div class="card">
-    <p class="eyebrow">Fitness Move (when unlocked)</p>
-    <p class="muted">SnapCal can’t call HealthKit itself (needs Apple’s $99 native app). Shortcuts can read today’s <b>Active Energy</b> while the phone is <b>unlocked</b>, copy it, then SnapCal picks it up.</p>
-    <p class="oknote" style="margin-top:10px"><b>Auto-copy is not inside SnapCal — it’s in the Shortcuts app Automation tab.</b><br/><br/>
-      1) Keep your existing shortcut that ends with <b>Copy to Clipboard</b> (rename it <b>SnapCal Move</b> if you want).<br/>
-      2) Shortcuts app → bottom <b>Automation</b> → <b>+</b> → <b>Time of Day</b>.<br/>
-      3) Pick a clock time (example 12:00) → <b>Daily</b> → <b>Next</b>.<br/>
-      4) Add action <b>Run Shortcut</b> → choose <b>SnapCal Move</b> (or your copy shortcut) → <b>Done</b>.<br/>
-      5) Open that automation → turn <b>Ask Before Running</b> <b>OFF</b> → confirm <b>Don’t Ask</b>.<br/><br/>
-      Apple has <b>no “every hour” button</b> — make another Time of Day automation for each time you want (e.g. 8:00, 12:00, 16:00, 20:00). Phone must be <b>unlocked</b> for Health to copy.</p>
-    <label class="row" style="margin-top:10px;gap:10px">
-      <input type="checkbox" id="autoMove" style="width:auto" />
-      <span class="tiny">On open: auto-read clipboard for Move</span>
+      <input type="checkbox" id="autoMove" style="width:auto" checked />
+      <span class="tiny">On open: auto-read clipboard for Move (recommended)</span>
     </label>
     <label class="row" style="margin-top:8px;gap:10px">
       <input type="checkbox" id="openShortcutIfEmpty" style="width:auto" />
-      <span class="tiny">If clipboard empty, also open Shortcuts (noisier)</span>
+      <span class="tiny">If clipboard empty on open, also run Shortcuts</span>
     </label>
     <label class="tiny" style="display:block;margin-top:8px">Shortcut name (must match exactly)</label>
     <input type="text" id="shortcutName" value="SnapCal Move" />
     <button class="btn primary" id="saveMoveAutoBtn" type="button">Save auto-Move settings</button>
-    <button class="btn light" id="fetchMoveBtn" type="button">Fetch Move now</button>
-    <button class="btn light" id="pasteMoveBtn" type="button">Paste Move</button>
+    <button class="btn light" id="fetchMoveBtn" type="button">Update Move now</button>
+    <button class="btn light" id="pasteMoveBtn" type="button">Retry clipboard</button>
     <button class="btn light" id="copyShortcutStepsBtn" type="button">Copy Shortcut recipe</button>
     <p class="tiny" style="margin-top:8px" id="moveAutoStatus"></p>
-    <p class="tiny" style="margin-top:8px">Paste Move opens a box: long-press → Paste once (no second Paste). Or enable auto-read on open after your Shortcut copies Move.</p>
+    <p class="tiny" style="margin-top:8px">First return after a Shortcut: if iOS asks to allow Paste once, tap Allow — after that it stays automatic.</p>
   </div>
-  <button class="btn danger" id="clearToday" type="button">Clear today only</button>
+<button class="btn danger" id="clearToday" type="button">Clear today only</button>
   <button class="btn light" id="exportBtn" type="button">Copy today’s JSON</button>
   <p class="tiny" style="margin:8px 0 0">“Clear today” removes only today’s meals/Move — not other days, not your food dictionary, not your Gemini key.</p>
 </section>
@@ -357,7 +220,7 @@ textarea{resize:vertical;min-height:72px}
           geminiKey: s.geminiKey || "",
           model: migrateGeminiModel(s.model || "gemini-2.5-flash"),
           useLlm: s.useLlm !== false,
-          autoMove: !!s.autoMove,
+          autoMove: s.autoMove != null ? !!s.autoMove : true,
           shortcutName: s.shortcutName || "SnapCal Move",
           lastAutoMoveAt: s.lastAutoMoveAt || 0,
           preferClipboard: s.preferClipboard !== false,
@@ -369,7 +232,7 @@ textarea{resize:vertical;min-height:72px}
       geminiKey: "",
       model: "gemini-2.5-flash",
       useLlm: true,
-      autoMove: false,
+      autoMove: true,
       shortcutName: "SnapCal Move",
       lastAutoMoveAt: 0,
       preferClipboard: true,
@@ -385,7 +248,7 @@ textarea{resize:vertical;min-height:72px}
       geminiKey: s.geminiKey != null ? s.geminiKey : (cur.geminiKey || ""),
       model: s.model != null ? s.model : (cur.model || "gemini-2.5-flash"),
       useLlm: s.useLlm != null ? s.useLlm : (cur.useLlm !== false),
-      autoMove: s.autoMove != null ? !!s.autoMove : !!cur.autoMove,
+      autoMove: s.autoMove != null ? !!s.autoMove : (cur.autoMove != null ? !!cur.autoMove : true),
       shortcutName: s.shortcutName != null ? s.shortcutName : (cur.shortcutName || "SnapCal Move"),
       lastAutoMoveAt: s.lastAutoMoveAt != null ? s.lastAutoMoveAt : (cur.lastAutoMoveAt || 0),
       preferClipboard: s.preferClipboard != null ? !!s.preferClipboard : (cur.preferClipboard !== false),
@@ -487,20 +350,20 @@ textarea{resize:vertical;min-height:72px}
     const ms = document.getElementById("moveAutoStatus");
     if (ms) {
       if (!s.autoMove) {
-        ms.textContent = "Auto-paste off. Use hourly Shortcuts Automation to refresh clipboard, then enable this.";
+        ms.textContent = "Auto clipboard off. Turn it on so opening SnapCal applies Move with no Paste tap.";
       } else if (s.lastAutoMoveAt) {
-        ms.textContent = "Auto-paste on. Last Move pull: " + new Date(s.lastAutoMoveAt).toLocaleString() +
-          (s.openShortcutIfEmpty ? " · will open Shortcuts if clipboard empty" : " · clipboard only (quiet)");
+        ms.textContent = "Auto clipboard on. Last Move: " + new Date(s.lastAutoMoveAt).toLocaleString() +
+          (s.openShortcutIfEmpty ? " · opens Shortcuts if empty" : " · clipboard only");
       } else {
-        ms.textContent = "Auto-paste on. On open: read clipboard" +
-          (s.openShortcutIfEmpty ? "; if empty, open Shortcuts." : " (no Shortcuts jump).");
+        ms.textContent = "Auto clipboard on. Open SnapCal after your Shortcut copies Active Energy." +
+          (s.openShortcutIfEmpty ? " Empty → run Shortcuts." : "");
       }
     }
     const mh = document.getElementById("moveHint");
     if (mh) {
       mh.textContent = s.autoMove
-        ? "Auto-paste on — reads clipboard Move when you open SnapCal (hourly Shortcut keeps it fresh)."
-        : "Type Move, Paste Move, or enable auto-paste in Setup.";
+        ? "Auto clipboard on — Move applies when you open SnapCal after the Shortcut copies it."
+        : "Enable auto clipboard in Setup, or tap Update Move / Retry clipboard.";
     }
 
   }
@@ -1144,7 +1007,6 @@ textarea{resize:vertical;min-height:72px}
     }
     day().move = v;
     saveAll(db);
-    try { sessionStorage.setItem("snapcal-autofetch", "1"); } catch (e) {}
     const s = loadSettings();
     s.lastAutoMoveAt = Date.now();
     saveSettings(s);
@@ -1217,8 +1079,9 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function fetchMoveViaShortcut(reason) {
-    try { sessionStorage.setItem("snapcal-autofetch", "1"); } catch (e) {}
-    toast(reason === "auto" ? "Phone unlocked → reading Active Energy via Shortcuts…" : "Opening Shortcuts (needs unlock)…");
+    // When Shortcuts returns here, we *must* read clipboard (old flag skipped that).
+    try { sessionStorage.setItem("snapcal-pending-clip", "1"); } catch (e) {}
+    toast(reason === "auto" ? "Opening Shortcuts to refresh Active Energy…" : "Opening Shortcuts — copies Move, then returns here");
     setTimeout(function () {
       location.href = shortcutRunUrl();
     }, 250);
@@ -1227,7 +1090,7 @@ textarea{resize:vertical;min-height:72px}
   function applyClipboardMoveText(text, quiet) {
     const n = parseMovePayload(text);
     if (n == null) {
-      if (!quiet) toast("No Move number in clipboard. Run your Shortcut, then Paste Move.");
+      if (!quiet) toast("No Move number in clipboard yet. Run SnapCal Move Shortcut first.");
       return false;
     }
     return setMoveKcal(n, "clipboard", { quietSame: !!quiet });
@@ -1235,13 +1098,13 @@ textarea{resize:vertical;min-height:72px}
 
   function tryClipboardMove(quiet) {
     if (!navigator.clipboard || !navigator.clipboard.readText) {
-      if (!quiet) toast("Clipboard read needs a Paste tap on iPhone");
+      if (!quiet) toast("This browser can’t read the clipboard automatically.");
       return Promise.resolve(false);
     }
     return navigator.clipboard.readText().then(function (text) {
       return applyClipboardMoveText(text, quiet);
     }).catch(function () {
-      if (!quiet) toast("Tap Paste Move (iOS needs a Paste confirm)");
+      if (!quiet) toast("iPhone blocked clipboard. Tap Allow if asked, or Update Move now.");
       return false;
     });
   }
@@ -1250,74 +1113,60 @@ textarea{resize:vertical;min-height:72px}
     const s = loadSettings();
     if (!s.autoMove) return;
     if (new URLSearchParams(location.search).get("move") != null) return;
-    try {
-      if (sessionStorage.getItem("snapcal-autofetch") === "1") return;
-    } catch (e) {}
-    // Don't thrash if we just applied Move
-    if (s.lastAutoMoveAt && Date.now() - s.lastAutoMoveAt < 45 * 1000) return;
 
-    // Quiet path: hourly Automation left Active Energy on the clipboard
-    tryClipboardMove(true).then(function (ok) {
-      if (ok) return;
-      if (s.openShortcutIfEmpty) {
-        fetchMoveViaShortcut("auto");
-      }
-      // else stay quiet — user can tap Paste Move if iOS blocked clipboard
-    });
+    var fromShortcut = false;
+    try {
+      fromShortcut = sessionStorage.getItem("snapcal-pending-clip") === "1";
+      if (fromShortcut) sessionStorage.removeItem("snapcal-pending-clip");
+    } catch (e) {}
+
+    if (!fromShortcut && s.lastAutoMoveAt && Date.now() - s.lastAutoMoveAt < 45 * 1000) return;
+
+    function attempt(pass) {
+      tryClipboardMove(true).then(function (ok) {
+        if (ok) return;
+        if (pass < 2 && fromShortcut) {
+          setTimeout(function () { attempt(pass + 1); }, 600);
+          return;
+        }
+        if (s.openShortcutIfEmpty && !fromShortcut) {
+          fetchMoveViaShortcut("auto");
+        }
+      });
+    }
+    attempt(0);
   }
 
   function shortcutRecipeText() {
     return [
-      "SnapCal Move — clear steps",
+      "SnapCal Move — copy Active Energy (no Paste tap in the app)",
       "",
-      "PART A — Your copy shortcut (you may already have this)",
-      "1. Open the Shortcuts app (blue icon)",
-      "2. Open your shortcut that has: Find Health Samples → Copy to Clipboard",
-      "3. Optional: tap the name at the top → rename to exactly: SnapCal Move",
-      "4. Fill Missing: OFF",
-      "5. Do NOT add Open URL / open SnapCal in this shortcut",
-      "6. Tap Play once while unlocked to test — clipboard should get today’s Cal number",
+      "PART A — Shortcut",
+      "1. Shortcuts app → + new shortcut",
+      "2. Add: Find Health Samples",
+      "   • Type: Active Energy",
+      "   • Start Date: today / start of day",
+      "   • Fill Missing: OFF",
+      "3. Add: Copy to Clipboard (Health Samples / today’s Cal)",
+      "4. Add: Open URLs → https://sudarshanmankad.github.io/snapcal/",
+      "5. Name exactly: SnapCal Move",
+      "6. Run once while unlocked to test — SnapCal should open and set Move by itself",
       "",
-      "PART B — Automate that shortcut (this is the missing piece)",
-      "Apple will NOT auto-run a normal shortcut by itself.",
-      "You must create an Automation that runs it on a clock time.",
+      "PART B — Optional schedule (clipboard refresh without opening app)",
+      "1. Shortcuts → Automation → + → Time of Day → Daily",
+      "2. Run Shortcut → SnapCal Move",
+      "   (For quiet hourly-ish refresh: make a Copy-only duplicate without Open URL,",
+      "    and keep SnapCal Move with Open URL for manual Update Move now)",
+      "3. Ask Before Running: OFF",
       "",
-      "1. Open Shortcuts app",
-      "2. Tap Automation at the BOTTOM of the screen (not All Shortcuts)",
-      "3. Tap + (top right)",
-      "4. Tap Time of Day",
-      "5. Choose Time of Day → set e.g. 12:00",
-      "6. Repeat → Daily",
-      "7. Tap Next",
-      "8. Tap New Blank Automation (or Add Action)",
-      "9. Search: Run Shortcut",
-      "10. Tap Run Shortcut",
-      "11. Tap Shortcut → pick SnapCal Move (or your Copy to Clipboard shortcut)",
-      "12. Tap Done",
-      "",
-      "PART C — Make it run without tapping Notify / Run",
-      "1. Back on Automation list, tap the automation you just made",
-      "2. Find Ask Before Running → turn it OFF",
-      "3. Tap Don’t Ask when iPhone confirms",
-      "4. Make sure Enable This Automation is ON",
-      "5. Tap Done",
-      "",
-      "PART D — More than once a day (Apple has no “every hour”)",
-      "Repeat PART B for each clock time you want, e.g.:",
-      "  8:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00",
-      "Each automation runs the SAME shortcut.",
-      "",
-      "PART E — SnapCal auto-paste when you open the app",
-      "1. Open SnapCal → Setup",
-      "2. Turn ON: On open: auto-read clipboard for Move",
-      "3. Leave OFF: If clipboard empty, also open Shortcuts",
-      "4. Shortcut name must match (SnapCal Move)",
-      "5. Save auto-Move settings",
+      "PART C — SnapCal",
+      "1. Setup → On open: auto-read clipboard for Move → ON → Save",
+      "2. Leave “If clipboard empty, also run Shortcuts” OFF unless you want that jump",
       "",
       "Limits:",
-      "- If phone is locked at that time, Health often will not copy",
-      "- If iOS asks to Paste in SnapCal once, allow it",
-      "- If auto-paste fails, tap Paste Move once"
+      "- Phone locked → Health often won’t copy",
+      "- First time iOS may ask Allow Paste once — allow it, then no taps",
+      "- Web apps cannot read Fitness without Shortcuts"
     ].join("\n");
   }
 
@@ -1765,8 +1614,8 @@ textarea{resize:vertical;min-height:72px}
     saveSettings(s);
     renderSetupAi();
     toast(s.autoMove
-      ? (s.openShortcutIfEmpty ? "Auto-paste on (+ open Shortcuts if empty)" : "Auto-paste on (clipboard on open)")
-      : "Auto-paste off");
+      ? (s.openShortcutIfEmpty ? "Auto clipboard on (+ Shortcuts if empty)" : "Auto clipboard on (no Paste tap)")
+      : "Auto clipboard off");
   };
 
   document.getElementById("fetchMoveBtn").onclick = function () {
@@ -1777,37 +1626,13 @@ textarea{resize:vertical;min-height:72px}
     fetchMoveViaShortcut("manual");
   };
 
-  function openPasteMoveSheet() {
-    openSheet(
-      '<p class="eyebrow">Paste Move</p>' +
-      '<h2 style="margin:4px 0 8px">One paste</h2>' +
-      '<p class="muted">Long-press the box → Paste. SnapCal reads it automatically — no second Paste tap.</p>' +
-      '<textarea id="movePasteBox" rows="4" placeholder="Long-press here → Paste\n(e.g. 192.583 Cal)"></textarea>' +
-      '<button class="btn primary" id="sheetApplyMove" type="button">Use this Move</button>' +
-      '<button class="btn light" id="sheetTryClip" type="button">Read clipboard instead</button>' +
-      '<button class="btn ghost" id="sheetNo" type="button">Cancel</button>'
-    );
-    var box = document.getElementById("movePasteBox");
-    function applyFromBox() {
-      var ok = applyClipboardMoveText(box.value, false);
-      if (ok) closeSheet();
-    }
-    box.addEventListener("paste", function () { setTimeout(applyFromBox, 0); });
-    box.addEventListener("input", function () {
-      if (parseMovePayload(box.value) != null) applyFromBox();
-    });
-    document.getElementById("sheetApplyMove").onclick = applyFromBox;
-    document.getElementById("sheetTryClip").onclick = function () {
-      tryClipboardMove(false).then(function (ok) { if (ok) closeSheet(); });
-    };
-    document.getElementById("sheetNo").onclick = closeSheet;
-    setTimeout(function () { try { box.focus(); } catch (e) {} }, 120);
+  function onRetryClipboard() {
+    tryClipboardMove(false);
   }
-  function onPasteMove() { openPasteMoveSheet(); }
   var pasteA = document.getElementById("pasteMoveBtn");
   var pasteB = document.getElementById("pasteMoveTodayBtn");
-  if (pasteA) pasteA.onclick = onPasteMove;
-  if (pasteB) pasteB.onclick = onPasteMove;
+  if (pasteA) pasteA.onclick = onRetryClipboard;
+  if (pasteB) pasteB.onclick = onRetryClipboard;
 
   document.getElementById("copyShortcutStepsBtn").onclick = function () {
     const text = shortcutRecipeText();
@@ -2051,6 +1876,12 @@ textarea{resize:vertical;min-height:72px}
   if (!gotMove) maybeAutoFetchMove();
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") maybeAutoFetchMove();
+  });
+  window.addEventListener("pageshow", function () {
+    maybeAutoFetchMove();
+  });
+  window.addEventListener("focus", function () {
+    maybeAutoFetchMove();
   });
 })();
 </script>
