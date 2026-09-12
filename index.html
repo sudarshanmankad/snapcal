@@ -125,13 +125,13 @@ textarea{resize:vertical;min-height:72px}
   </div>
 
   <div class="card" id="moveCard">
-    <div class="row">
-      <p class="eyebrow" style="margin:0">Fitness Move</p>
+    <div class="row" style="align-items:center;gap:8px">
+      <div style="flex:1;min-width:0">
+        <p class="eyebrow" style="margin:0">Fitness Move</p>
+        <p class="big" id="move" style="font-size:22px;margin:0">Not set</p>
+      </div>
       <button class="chip ghost" id="editMoveBtn" type="button">Edit</button>
-    </div>
-    <div class="row" style="margin-top:6px;align-items:center;gap:10px">
-      <p class="big" id="move" style="font-size:22px;margin:0;flex:1">Not set</p>
-      <button class="btn primary" id="updateMoveBtn" type="button" style="width:auto;margin:0;padding:10px 16px">Update</button>
+      <button class="btn primary" id="updateMoveBtn" type="button" style="width:auto;margin:0;padding:10px 14px">Update</button>
     </div>
   </div>
 
@@ -248,26 +248,21 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny" style="margin-top:8px">Chrome ≠ Safari (separate storage). To move meals: Chrome → Setup → Copy full backup → Safari → Setup → Restore. Then Add to Home Screen from Safari at …/snapcal/ (with the slash). Always use that Home Screen icon afterward.</p>
   </div>
   <div class="card">
-    <p class="eyebrow">Fitness Move</p>
-    <p class="muted">SnapCal reads Move from the clipboard when you open the app or tap <b>Update</b>. Use a Shortcut only to <b>copy</b> Active Energy (don’t rely on opening Shortcuts from SnapCal).</p>
-    <p class="oknote" style="margin-top:10px"><b>Shortcut (once):</b> Find Health Samples (Active Energy, today) → <b>Copy to Clipboard</b> → <b>Open URL</b> <code>https://sudarshanmankad.github.io/snapcal/</code><br/><br/>
-      Name it exactly <b>SnapCal Move</b>. Phone must be unlocked when it runs.<br/><br/>
-      <b>Optional schedule:</b> Automation → Time of Day → Run Shortcut → SnapCal Move → Ask Before Running <b>OFF</b>. For schedule-only you can omit Open URL (just Copy) — SnapCal picks it up next open.</p>
-    <label class="row" style="margin-top:10px;gap:10px">
-      <input type="checkbox" id="autoMove" style="width:auto" checked />
-      <span class="tiny">On open: auto-read clipboard for Move (recommended)</span>
-    </label>
-    <label class="row" style="margin-top:8px;gap:10px">
-      <input type="checkbox" id="openShortcutIfEmpty" style="width:auto" />
-      <span class="tiny">If clipboard empty on open, also run Shortcuts</span>
-    </label>
-    <label class="tiny" style="display:block;margin-top:8px">Shortcut name (must match exactly)</label>
+    <p class="eyebrow">Fitness Move (one tap — no Paste)</p>
+    <p class="muted">iPhone always asks <b>Paste</b> if a website reads the clipboard. SnapCal avoids that: <b>Update</b> runs your Shortcut, and the Shortcut opens SnapCal with Move in the link (<code>?move=436</code>) — one tap, no Paste.</p>
+    <p class="oknote" style="margin-top:10px"><b>Shortcut (once) — must put the number in the URL:</b><br/>
+      1) Find Health Samples → Active Energy → today<br/>
+      2) Calculate Statistics → <b>Sum</b><br/>
+      3) Open URLs → <code>https://sudarshanmankad.github.io/snapcal/?move=</code> then insert the <b>Sum</b> variable after <code>move=</code><br/><br/>
+      Name it exactly <b>SnapCal Move</b> (or match the name below). Phone unlocked.<br/><br/>
+      Do <b>not</b> use Copy to Clipboard for Update — that causes the Paste prompt.</p>
+    <label class="tiny" style="display:block;margin-top:10px">Shortcut name (must match exactly)</label>
     <input type="text" id="shortcutName" value="SnapCal Move" />
-    <button class="btn primary" id="saveMoveAutoBtn" type="button">Save auto-Move settings</button>
-    <button class="btn light" id="updateMoveSetupBtn" type="button">Update Move from clipboard</button>
+    <button class="btn primary" id="saveMoveAutoBtn" type="button">Save shortcut name</button>
+    <button class="btn light" id="updateMoveSetupBtn" type="button">Update Move</button>
     <button class="btn light" id="copyShortcutStepsBtn" type="button">Copy Shortcut recipe</button>
     <p class="tiny" style="margin-top:8px" id="moveAutoStatus"></p>
-    <p class="tiny" style="margin-top:8px">Tap Update (or open SnapCal) to read the clipboard. iPhone may ask Allow Paste once — after Allow, Update works without the old Paste sheet.</p>
+    <p class="tiny" style="margin-top:8px">If Shortcuts says “not found”, create the shortcut with that exact name. Edit still works for typing Move by hand.</p>
   </div>
   <button class="btn danger" id="clearToday" type="button">Clear today only</button>
   <button class="btn light" id="exportBtn" type="button">Copy today’s JSON</button>
@@ -477,23 +472,13 @@ textarea{resize:vertical;min-height:72px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
 
-    const autoEl = document.getElementById("autoMove");
     const snEl = document.getElementById("shortcutName");
-    const openEmptyEl = document.getElementById("openShortcutIfEmpty");
-    if (autoEl) autoEl.checked = !!s.autoMove;
     if (snEl) snEl.value = s.shortcutName || "SnapCal Move";
-    if (openEmptyEl) openEmptyEl.checked = !!s.openShortcutIfEmpty;
     const ms = document.getElementById("moveAutoStatus");
     if (ms) {
-      if (!s.autoMove) {
-        ms.textContent = "Auto clipboard off. Turn it on so opening SnapCal applies Move with no Paste tap.";
-      } else if (s.lastAutoMoveAt) {
-        ms.textContent = "Auto clipboard on. Last Move: " + new Date(s.lastAutoMoveAt).toLocaleString() +
-          (s.openShortcutIfEmpty ? " · opens Shortcuts if empty" : " · clipboard only");
-      } else {
-        ms.textContent = "Auto clipboard on. Open SnapCal after your Shortcut copies Active Energy." +
-          (s.openShortcutIfEmpty ? " Empty → run Shortcuts." : "");
-      }
+      ms.textContent = s.lastAutoMoveAt
+        ? ("Last Move update: " + new Date(s.lastAutoMoveAt).toLocaleString() + " · Shortcut: " + (s.shortcutName || "SnapCal Move"))
+        : ("Tap Update to run Shortcut “" + (s.shortcutName || "SnapCal Move") + "” (URL must include ?move=)");
     }
   }
 
@@ -1209,12 +1194,12 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function fetchMoveViaShortcut(reason) {
-    // When Shortcuts returns here, we *must* read clipboard (old flag skipped that).
-    try { sessionStorage.setItem("snapcal-pending-clip", "1"); } catch (e) {}
-    toast(reason === "auto" ? "Opening Shortcuts to refresh Active Energy…" : "Opening Shortcuts — copies Move, then returns here");
+    // Shortcut must Open URL …/snapcal/?move=NUMBER (no clipboard → no iOS Paste prompt).
+    try { sessionStorage.setItem("snapcal-pending-move", "1"); } catch (e) {}
+    toast(reason === "auto" ? "Refreshing Move via Shortcuts…" : "One tap: Shortcuts opens SnapCal with Move in the link");
     setTimeout(function () {
       location.href = shortcutRunUrl();
-    }, 250);
+    }, 200);
   }
 
   function applyClipboardMoveText(text, quiet) {
@@ -1240,61 +1225,32 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function maybeAutoFetchMove() {
-    const s = loadSettings();
-    if (!s.autoMove) return;
-    if (new URLSearchParams(location.search).get("move") != null) return;
-
-    var fromShortcut = false;
-    try {
-      fromShortcut = sessionStorage.getItem("snapcal-pending-clip") === "1";
-      if (fromShortcut) sessionStorage.removeItem("snapcal-pending-clip");
-    } catch (e) {}
-
-    if (!fromShortcut && s.lastAutoMoveAt && Date.now() - s.lastAutoMoveAt < 45 * 1000) return;
-
-    function attempt(pass) {
-      tryClipboardMove(true).then(function (ok) {
-        if (ok) return;
-        if (pass < 2 && fromShortcut) {
-          setTimeout(function () { attempt(pass + 1); }, 600);
-          return;
-        }
-        // Do not jump to Shortcuts from auto-open — clipboard Update is the reliable path.
-      });
-    }
-    attempt(0);
+    // Never auto-read clipboard — iOS shows a second Paste tap. Move arrives via ?move= from Shortcut.
+    if (applyMoveQuery()) return;
   }
 
   function shortcutRecipeText() {
     return [
-      "SnapCal Move — copy Active Energy (no Paste tap in the app)",
+      "SnapCal Move — one tap, no Paste",
       "",
-      "PART A — Shortcut",
-      "1. Shortcuts app → + new shortcut",
-      "2. Add: Find Health Samples",
+      "Why: websites cannot read Fitness. Clipboard reads always show iPhone’s Paste button.",
+      "Fix: put today’s Active Energy in the SnapCal link as ?move=",
+      "",
+      "1. Shortcuts → + → name exactly: SnapCal Move",
+      "2. Add action: Find Health Samples",
       "   • Type: Active Energy",
-      "   • Start Date: today / start of day",
+      "   • Start Date: start of today",
+      "   • End Date: now (optional)",
       "   • Fill Missing: OFF",
-      "3. Add: Copy to Clipboard (Health Samples / today’s Cal)",
-      "4. Add: Open URLs → https://sudarshanmankad.github.io/snapcal/",
-      "5. Name exactly: SnapCal Move",
-      "6. Run once while unlocked to test — SnapCal should open and set Move by itself",
+      "3. Add action: Calculate Statistics → Sum",
+      "4. Add action: Open URLs",
+      "   URL: https://sudarshanmankad.github.io/snapcal/?move=",
+      "   Then tap the URL field → Variable → insert Sum right after move=",
+      "   Final example: https://sudarshanmankad.github.io/snapcal/?move=436",
+      "5. Do NOT add Copy to Clipboard",
+      "6. Run once unlocked to test — SnapCal opens and Move sets with no Paste",
       "",
-      "PART B — Optional schedule (clipboard refresh without opening app)",
-      "1. Shortcuts → Automation → + → Time of Day → Daily",
-      "2. Run Shortcut → SnapCal Move",
-      "   (For quiet hourly-ish refresh: make a Copy-only duplicate without Open URL,",
-      "    and keep SnapCal Move with Open URL for manual Update Move now)",
-      "3. Ask Before Running: OFF",
-      "",
-      "PART C — SnapCal",
-      "1. Setup → On open: auto-read clipboard for Move → ON → Save",
-      "2. Leave “If clipboard empty, also run Shortcuts” OFF unless you want that jump",
-      "",
-      "Limits:",
-      "- Phone locked → Health often won’t copy",
-      "- First time iOS may ask Allow Paste once — allow it, then no taps",
-      "- Web apps cannot read Fitness without Shortcuts"
+      "In SnapCal: tap Update (runs this shortcut). Edit = type Move manually."
     ].join("\n");
   }
 
@@ -1715,19 +1671,17 @@ textarea{resize:vertical;min-height:72px}
 
   document.getElementById("saveMoveAutoBtn").onclick = function () {
     const s = loadSettings();
-    s.autoMove = document.getElementById("autoMove").checked;
-    s.openShortcutIfEmpty = document.getElementById("openShortcutIfEmpty").checked;
     s.shortcutName = (document.getElementById("shortcutName").value || "SnapCal Move").trim() || "SnapCal Move";
+    s.autoMove = true;
+    s.openShortcutIfEmpty = false;
     saveSettings(s);
     renderSetupAi();
-    toast(s.autoMove
-      ? (s.openShortcutIfEmpty ? "Auto clipboard on (+ Shortcuts if empty)" : "Auto clipboard on (no Paste tap)")
-      : "Auto clipboard off");
+    toast("Shortcut name saved: " + s.shortcutName);
   };
 
   function onUpdateMove() {
-    // User gesture → clipboard read (what actually works on iPhone). Never open Shortcuts here.
-    tryClipboardMove(false);
+    // One tap: run Shortcut that returns with ?move= — never clipboard.readText (that forces Paste).
+    fetchMoveViaShortcut("manual");
   }
   var updToday = document.getElementById("updateMoveBtn");
   var updSetup = document.getElementById("updateMoveSetupBtn");
