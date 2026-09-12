@@ -150,7 +150,7 @@ textarea{resize:vertical;min-height:72px}
     <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed"></textarea>
     <button class="btn primary" id="logBtn" type="button">Parse &amp; confirm</button>
     <div class="chips" id="quick" style="margin-top:10px"></div>
-    <p class="tiny" style="margin-top:8px" id="chatHint">Built-in foods + foods you save. Free-form chat needs a Gemini key in Setup (on by default once keyed). Always confirm before save.</p>
+    <p class="tiny" style="margin-top:8px" id="chatHint">With a Gemini key in Setup, chat estimates any meal from your sentence (kcal + macros) — not a fixed food list. Always confirm before save.</p>
   </div>
 
   <div class="card">
@@ -214,7 +214,7 @@ textarea{resize:vertical;min-height:72px}
   </div>
   <div class="card">
     <p class="eyebrow">Smart chat (optional)</p>
-    <p class="muted">Built-in list is a starter. Your phone also learns foods you confirm. Chat is not fully smart until you paste a free <b>Gemini API key</b> — then it can read free-form meals. For unknown foods, paste a free <b>Gemini API key</b> — stored only on this phone, never in GitHub.</p>
+    <p class="muted">Paste a free <b>Gemini API key</b> and chat becomes LLM-first: your sentence → estimated foods with kcal + protein/carbs/fat. No fixed catalog. Key stays on this phone only, never in GitHub. Quick chips still use the built-in list as a shortcut.</p>
     <label class="tiny" style="display:block;margin-top:10px">Gemini API key</label>
     <div class="row" style="gap:8px;align-items:center">
       <input type="password" id="geminiKey" autocomplete="off" placeholder="AIza…" style="flex:1;margin:0" />
@@ -226,7 +226,7 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny" style="margin-top:4px">Use <code>gemini-2.5-flash</code> (free). Old <code>gemini-2.0-flash</code> is shut down.</p>
     <label class="row" style="margin-top:10px;gap:10px">
       <input type="checkbox" id="useLlm" checked style="width:auto" />
-      <span class="tiny" style="color:var(--ink)">Use Gemini when chat has unmatched foods</span>
+      <span class="tiny" style="color:var(--ink)">Use Gemini for chat (LLM-first meal estimates)</span>
     </label>
     <button class="btn primary" id="saveAiBtn" type="button">Save AI settings</button>
     <button class="btn light" id="testAiBtn" type="button">Test Gemini</button>
@@ -237,7 +237,7 @@ textarea{resize:vertical;min-height:72px}
   <div class="card">
     <p class="eyebrow">Your food dictionary</p>
     <p class="muted" id="myFoodsCount">0 personal foods on this phone.</p>
-    <p class="tiny">Grows when you save meals (especially with grams or “which is 160cal”). Used before Gemini.</p>
+    <p class="tiny">Grows when you save meals. Used for quick chips / offline fallback — not for Gemini chat.</p>
     <button class="btn light" id="clearMyFoodsBtn" type="button">Clear personal foods</button>
   </div>
   <div class="card">
@@ -466,8 +466,8 @@ textarea{resize:vertical;min-height:72px}
     const hint = document.getElementById("chatHint");
     if (hint) {
       hint.textContent = s.geminiKey && s.useLlm
-        ? "Smart chat on: built-in + your dictionary + Gemini for unknowns. Always confirm before save."
-        : "Built-in foods + foods you save. Add a Gemini key in Setup for unknown foods. Always confirm before save.";
+        ? "Gemini chat on: your sentence → kcal + macros (not a fixed food list). Always confirm before save."
+        : "Add a Gemini key in Setup for free-form chat. Without it, only the built-in list works. Always confirm before save.";
     }
     const status = document.getElementById("dataStatus");
     if (status) {
@@ -834,8 +834,9 @@ textarea{resize:vertical;min-height:72px}
     const model = encodeURIComponent(migrateGeminiModel(s.model || "gemini-2.5-flash"));
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
     const prompt =
-      "Parse this meal log into calories. Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), grade (llm|said|grams), warn (short string).\n" +
-      "Rules: include EVERY food mentioned; split 'onion + broccoli + beans 250g' into items (split grams across them or one mixed-veg line); trailing grams like 'yogurt 100g' count; use USDA-like densities; cooked vs raw rice matters; if user says which/that is N cal, use that kcal and grade said; be slightly conservative (prefer not underestimating); no markdown.\n" +
+      "You are a nutrition estimator. Read the user's free-form meal sentence and invent NO catalog — estimate every food yourself.\n" +
+      "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
+      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g' (split grams or one mixed line); trailing/leading grams count; USDA-like densities; if user says which/that is N cal, use that kcal and grade said; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
       "Meal: " + text;
     return fetch(url, {
       method: "POST",
@@ -863,10 +864,19 @@ textarea{resize:vertical;min-height:72px}
         }
         if (!Array.isArray(parsed)) throw new Error("Gemini JSON was not an array");
         return parsed.map(function (row) {
+          function numOrNull(v) {
+            if (v == null || v === "") return null;
+            const n = +v;
+            return isNaN(n) ? null : Math.max(0, Math.round(n * 10) / 10);
+          }
           return {
             name: String(row.name || "Food").trim(),
             detail: String(row.detail || row.name || "Food").trim(),
             kcal: Math.max(0, Math.round(+row.kcal || 0)),
+            grams: numOrNull(row.grams),
+            protein: numOrNull(row.protein),
+            carbs: numOrNull(row.carbs),
+            fat: numOrNull(row.fat),
             grade: row.grade === "said" || row.grade === "grams" ? row.grade : "llm",
             warn: row.warn || "LLM estimate — confirm before trusting."
           };
@@ -876,42 +886,41 @@ textarea{resize:vertical;min-height:72px}
   }
 
   async function parseChatSmart(raw) {
-    const local = parseChat(raw);
     const s = loadSettings();
-    if (!local.unknown.length) return { items: local.items, unknown: [], sourceNote: "local" };
-    if (!s.geminiKey || !s.useLlm) {
-      return {
-        items: local.items,
-        unknown: local.unknown,
-        sourceNote: "local",
-        llmError: !s.useLlm
-          ? "Gemini is off in Setup — only built-in foods were parsed."
-          : "Add a Gemini API key in Setup so chat can understand free-form meals."
-      };
-    }
-    try {
-      const llmItems = await parseWithGemini(raw);
-      if (!llmItems || !llmItems.length) return local;
-      // Free-form meals: prefer full Gemini parse when local missed pieces
-      if (!local.items.length || local.unknown.length) {
-        return { items: llmItems, unknown: [], sourceNote: "gemini" };
+    // LLM-first: when Gemini is configured, the model invents the meal list
+    // (no built-in catalog matching). Local parse is offline / no-key fallback only.
+    if (s.geminiKey && s.useLlm) {
+      try {
+        const llmItems = await parseWithGemini(raw);
+        if (llmItems && llmItems.length) {
+          return { items: llmItems, unknown: [], sourceNote: "gemini" };
+        }
+        const localEmpty = parseChat(raw);
+        return {
+          items: localEmpty.items,
+          unknown: localEmpty.unknown,
+          sourceNote: "local",
+          llmError: "Gemini returned no foods — fell back to built-in list."
+        };
+      } catch (err) {
+        const localFail = parseChat(raw);
+        return {
+          items: localFail.items,
+          unknown: localFail.unknown,
+          sourceNote: "local",
+          llmError: String(err.message || err)
+        };
       }
-      const have = {};
-      local.items.forEach(function (i) { have[normName(i.name)] = true; });
-      const extra = llmItems.filter(function (i) { return !have[normName(i.name)]; });
-      return {
-        items: local.items.concat(extra),
-        unknown: [],
-        sourceNote: "local+gemini"
-      };
-    } catch (err) {
-      return {
-        items: local.items,
-        unknown: local.unknown,
-        sourceNote: "local",
-        llmError: String(err.message || err)
-      };
     }
+    const local = parseChat(raw);
+    return {
+      items: local.items,
+      unknown: local.unknown,
+      sourceNote: "local",
+      llmError: !s.useLlm
+        ? "Gemini is off in Setup — using built-in list only."
+        : "Add a Gemini API key in Setup so chat can estimate any meal from your sentence."
+    };
   }
 
   function parseChat(raw) {
@@ -1405,8 +1414,13 @@ textarea{resize:vertical;min-height:72px}
       "<p class='eyebrow'>Confirm</p><h2 style='margin:4px 0 8px'>Save meal? " + tot + " kcal</h2>";
     if (photo) body += '<img src="' + photo + '" alt="" style="width:100%;border-radius:14px;margin:6px 0 10px;max-height:160px;object-fit:cover" />';
     items.forEach(function (i) {
+      var macroBits = [];
+      if (i.protein != null) macroBits.push("P " + i.protein + "g");
+      if (i.carbs != null) macroBits.push("C " + i.carbs + "g");
+      if (i.fat != null) macroBits.push("F " + i.fat + "g");
       body +=
         '<div class="itemrow"><div><div>' + escapeHtml(i.detail) + "</div>" +
+        (macroBits.length ? '<div class="tiny">' + escapeHtml(macroBits.join(" · ")) + "</div>" : "") +
         (i.warn ? '<div class="tiny">' + escapeHtml(i.warn) + "</div>" : "") +
         gradeBadge(i.grade) +
         '</div><b>' + i.kcal + "</b></div>";
@@ -1425,7 +1439,7 @@ textarea{resize:vertical;min-height:72px}
       return;
     }
     body +=
-      '<p class="tiny" style="margin:10px 0">Estimates use a personal food list — not a lab assay. Labels &amp; weighed grams win.</p>' +
+      '<p class="tiny" style="margin:10px 0">Gemini estimates kcal + macros from your sentence (not a fixed food catalog). Labels &amp; weighed grams still win when you have them.</p>' +
       '<button class="btn primary" id="sheetOk" type="button">Save to today</button>' +
       '<button class="btn light" id="sheetNo" type="button">Cancel</button>';
     openSheet(body);
@@ -1615,16 +1629,15 @@ textarea{resize:vertical;min-height:72px}
     const raw = document.getElementById("text").value;
     const btn = document.getElementById("logBtn");
     const s = loadSettings();
-    const localProbe = parseChat(raw);
-    if (localProbe.unknown.length && s.geminiKey && s.useLlm) {
+    if (s.geminiKey && s.useLlm) {
       btn.disabled = true;
       btn.textContent = "Asking Gemini…";
     }
     try {
       const parsed = await parseChatSmart(raw);
-      if (parsed.llmError) toast(parsed.llmError.indexOf("Gemini HTTP") === 0 || parsed.llmError.indexOf("Gemini:") === 0 ? parsed.llmError : parsed.llmError);
+      if (parsed.llmError) toast(parsed.llmError);
       if (parsed.unknown && parsed.unknown.length && (!parsed.items || !parsed.items.length)) {
-        toast("Couldn’t parse that. Add a Gemini key in Setup, or use grams + food names.");
+        toast("Couldn’t parse that. Add a Gemini key in Setup for free-form meals.");
       }
       confirmMeal({
         items: parsed.items,

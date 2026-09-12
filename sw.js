@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v14-20260912-uncooked-cantaloupe";
+const CACHE = "snapcal-v15-20260912-llm-first";
 const ASSETS = [
   "./",
   "./index.html",
