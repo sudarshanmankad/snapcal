@@ -133,7 +133,7 @@ textarea{resize:vertical;min-height:72px}
 
   <div class="card">
     <p class="eyebrow">Chat log</p>
-    <textarea id="text" rows="2" placeholder="I ate 1 idli, 2 cookies, 50g cooked rice"></textarea>
+    <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed"></textarea>
     <button class="btn primary" id="logBtn" type="button">Parse &amp; confirm</button>
     <div class="chips" id="quick" style="margin-top:10px"></div>
     <p class="tiny" style="margin-top:8px">Counts &amp; grams beat plate photos. Say cooked vs raw for rice. Brand cookies when you can.</p>
@@ -246,7 +246,13 @@ textarea{resize:vertical;min-height:72px}
     { id: "chicken", name: "Chicken", kcal: 165, perG: 1.65, unit: "serving", aliases: ["chicken breast"] },
     { id: "salad", name: "Salad", kcal: 80, perG: null, unit: "bowl", aliases: [] },
     { id: "samosa", name: "Samosa", kcal: 250, perG: null, unit: "piece", aliases: [] },
-    { id: "peanut", name: "Peanuts", kcal: 160, perG: 5.7, unit: "handful", aliases: ["peanut"] }
+    { id: "peanut", name: "Peanuts", kcal: 160, perG: 5.7, unit: "handful", aliases: ["peanut"] },
+    { id: "oats", name: "Oats", kcal: 380, perG: 3.8, unit: "serving", aliases: ["oatmeal", "rolled oats", "oat"] },
+    { id: "whey", name: "Whey protein", kcal: 120, perG: 4.0, unit: "scoop", aliases: ["protein whey", "whey protein", "protein powder", "whey powder", "protein"] },
+    { id: "chia", name: "Chia seeds", kcal: 50, perG: 4.86, unit: "serving", aliases: ["chia seed", "chia", "chia seeds"] },
+    { id: "almonds", name: "Almonds", kcal: 160, perG: 5.8, unit: "handful", aliases: ["almond"] },
+    { id: "milk", name: "Milk", kcal: 150, perG: 0.64, unit: "cup", aliases: ["whole milk"] },
+    { id: "apple", name: "Apple", kcal: 95, perG: null, unit: "piece", aliases: [] }
   ];
 
   function todayKey(d) {
@@ -329,9 +335,30 @@ textarea{resize:vertical;min-height:72px}
       .replace(/\s+/g, " ");
   }
 
+  function stripSaidKcal(text) {
+    const s = String(text || "");
+    const patterns = [
+      /\bwhich\s+is\s+(\d+(?:\.\d+)?)\s*(k?cal(?:ories)?)\b/i,
+      /\b(?:that\s+is|thats|that's|=)\s*(\d+(?:\.\d+)?)\s*(k?cal(?:ories)?)\b/i,
+      /\((\d+(?:\.\d+)?)\s*(k?cal(?:ories)?)\)/i,
+      /\b(\d+(?:\.\d+)?)\s*(k?cal(?:ories)?)\b/i
+    ];
+    for (let i = 0; i < patterns.length; i++) {
+      const m = s.match(patterns[i]);
+      if (m) {
+        return {
+          kcal: Math.round(+m[1]),
+          cleaned: s.replace(patterns[i], " ").replace(/\s+/g, " ").trim()
+        };
+      }
+    }
+    return { kcal: null, cleaned: s.trim() };
+  }
+
   function findFood(raw) {
     let t = normName(raw);
     t = t.replace(/^(of|a|an|the)\s+/, "");
+    t = stripSaidKcal(t).cleaned;
     // cooked/raw rice cues
     if (/\b(raw|uncooked)\b/.test(t) && /\brice\b/.test(t)) {
       return FOODS.find(function (f) { return f.id === "rice-raw"; });
@@ -340,14 +367,21 @@ textarea{resize:vertical;min-height:72px}
       return FOODS.find(function (f) { return f.id === "rice"; });
     }
     // strip quantity words leftovers
-    t = t.replace(/\b(pieces?|pcs?|cups?|bowls?|plates?|servings?)\b/g, "").trim();
+    t = t.replace(/\b(pieces?|pcs?|cups?|bowls?|plates?|servings?|scoops?)\b/g, "").trim();
     let best = null;
+    let bestScore = -1;
     FOODS.forEach(function (f) {
       const names = [f.id, f.name].concat(f.aliases || []).map(normName);
       names.forEach(function (n) {
         if (!n) return;
-        if (t === n || t === n.replace(/s$/, "") || n === t.replace(/s$/, "")) best = f;
-        else if (!best && (t.startsWith(n) || n.startsWith(t))) best = f;
+        let score = -1;
+        if (t === n || t === n.replace(/s$/, "") || n === t.replace(/s$/, "")) score = 100 + n.length;
+        else if (t.indexOf(n) !== -1) score = 80 + n.length;
+        else if (n.indexOf(t) !== -1 && t.length >= 3) score = 60 + t.length;
+        if (score > bestScore) {
+          bestScore = score;
+          best = f;
+        }
       });
     });
     return best;
@@ -360,20 +394,32 @@ textarea{resize:vertical;min-height:72px}
     const items = [];
     const unknown = [];
     parts.forEach(function (chunk) {
-      let m = chunk.match(/^(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s+(?:of\s+)?(.+)$/i);
+      const said = stripSaidKcal(chunk);
+      const work = said.cleaned || chunk;
+
+      let m = work.match(/^(\d+(?:\.\d+)?)\s*(g|grams?|gm)\s+(?:of\s+)?(.+)$/i);
       if (m) {
         const f = findFood(m[3]);
         const q = +m[1];
-        if (!f || f.perG == null) {
-          if (f) {
-            items.push({
-              name: f.name,
-              detail: q + " g " + f.name + " (est.)",
-              kcal: Math.round(f.kcal * (q / 100)),
-              grade: "est",
-              warn: "No per-gram density — rough estimate from serving."
-            });
-          } else unknown.push(chunk);
+        if (!f && said.kcal == null) { unknown.push(chunk); return; }
+        if (said.kcal != null) {
+          items.push({
+            name: f ? f.name : m[3].trim(),
+            detail: q + " g " + (f ? f.name : m[3].trim()) + " · you said " + said.kcal,
+            kcal: said.kcal,
+            grade: "said",
+            warn: "Using the calorie number you typed."
+          });
+          return;
+        }
+        if (f.perG == null) {
+          items.push({
+            name: f.name,
+            detail: q + " g " + f.name + " (est.)",
+            kcal: Math.round(f.kcal * (q / 100)),
+            grade: "est",
+            warn: "No per-gram density — rough estimate from serving."
+          });
           return;
         }
         items.push({
@@ -387,11 +433,21 @@ textarea{resize:vertical;min-height:72px}
         });
         return;
       }
-      m = chunk.match(/^(\d+(?:\.\d+)?)\s*(x|×)?\s*(.+)$/i);
+      m = work.match(/^(\d+(?:\.\d+)?)\s*(x|×)?\s*(.+)$/i);
       if (m) {
         const f = findFood(m[3]);
         const q = +m[1];
-        if (!f) { unknown.push(chunk); return; }
+        if (!f && said.kcal == null) { unknown.push(chunk); return; }
+        if (said.kcal != null) {
+          items.push({
+            name: f ? f.name : m[3].trim(),
+            detail: q + " × " + (f ? f.name : m[3].trim()) + " · you said " + said.kcal,
+            kcal: said.kcal,
+            grade: "said",
+            warn: "Using the calorie number you typed."
+          });
+          return;
+        }
         items.push({
           name: f.name,
           detail: q + " × " + f.name,
@@ -401,8 +457,18 @@ textarea{resize:vertical;min-height:72px}
         });
         return;
       }
-      const f = findFood(chunk);
-      if (!f) { unknown.push(chunk); return; }
+      const f = findFood(work);
+      if (!f && said.kcal == null) { unknown.push(chunk); return; }
+      if (said.kcal != null) {
+        items.push({
+          name: f ? f.name : work,
+          detail: (f ? f.name : work) + " · you said " + said.kcal,
+          kcal: said.kcal,
+          grade: "said",
+          warn: "Using the calorie number you typed."
+        });
+        return;
+      }
       items.push({
         name: f.name,
         detail: "1 × " + f.name,
@@ -425,7 +491,7 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function gradeBadge(g) {
-    if (g === "label" || g === "grams") return '<span class="badge label">' + g + "</span>";
+    if (g === "label" || g === "grams" || g === "said") return '<span class="badge label">' + g + "</span>";
     return '<span class="badge est">' + (g || "est") + "</span>";
   }
 
@@ -722,7 +788,7 @@ textarea{resize:vertical;min-height:72px}
 
   // --- wire UI ---
   document.getElementById("quick").innerHTML = FOODS.filter(function (f) {
-    return ["idli", "roti", "dal", "rice", "chai", "cookie", "eggs", "banana"].indexOf(f.id) >= 0;
+    return ["idli", "roti", "dal", "rice", "oats", "chai", "cookie", "eggs", "banana"].indexOf(f.id) >= 0;
   }).map(function (f) {
     return '<button type="button" class="chip" data-qid="' + f.id + '">' + f.name + "</button>";
   }).join("");
