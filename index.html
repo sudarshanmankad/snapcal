@@ -201,6 +201,25 @@ textarea{resize:vertical;min-height:56px}
     </div>
   </div>
 
+  <div class="card" id="workoutCard">
+    <div class="row">
+      <div style="min-width:0">
+        <p class="muted">Workout</p>
+        <p class="big" id="workoutExtraLabel">No session</p>
+      </div>
+      <div class="compact-actions">
+        <button class="chip ghost" id="workoutManualBtn" type="button">Extra</button>
+        <label class="btn primary" id="workoutPhotoBtn" style="width:auto;margin:0;padding:6px 12px;min-height:32px;font-size:12px;border-radius:12px;display:inline-flex;align-items:center;cursor:pointer">
+          Add photo
+          <input id="workoutPhotoInput" type="file" accept="image/*" capture="environment" class="hide" />
+        </label>
+      </div>
+    </div>
+    <p class="tiny" style="margin-top:8px">Import a trainer plan photo → save as a set → tap when you did it. Extra kcal is only what Move likely missed (not a double count).</p>
+    <div class="chips" id="workoutSetChips" style="margin-top:8px"></div>
+    <div id="workoutTodayList" style="margin-top:8px"></div>
+  </div>
+
   <div class="card" id="proteinCard">
     <div class="row">
       <div>
@@ -414,6 +433,7 @@ textarea{resize:vertical;min-height:56px}
   const KEY = "snapcal-v1";                 // meals + history by day
   const SETTINGS_KEY = "snapcal-settings";  // Gemini key / prefs
   const MYFOODS_KEY = "snapcal-my-foods";   // personal food dictionary
+  const WORKOUTS_KEY = "snapcal-workouts";  // reusable trainer workout sets
   const LEGACY_DAY_KEYS = ["snapcal-onefile", "snapcal-v0"];
   const FOODS = [
     { id: "idli", name: "Idli", kcal: 70, perG: null, protein: 2, proteinPerG: null, unit: "piece", aliases: ["idly"] },
@@ -545,6 +565,63 @@ textarea{resize:vertical;min-height:56px}
     localStorage.setItem(MYFOODS_KEY, JSON.stringify(list));
   }
 
+  function loadWorkoutSets() {
+    try {
+      const data = JSON.parse(localStorage.getItem(WORKOUTS_KEY));
+      if (data && Array.isArray(data.sets)) return data.sets;
+      if (Array.isArray(data)) return data;
+    } catch (e) {}
+    return [];
+  }
+
+  function saveWorkoutSets(sets) {
+    localStorage.setItem(WORKOUTS_KEY, JSON.stringify({ schema: 1, sets: sets || [] }));
+  }
+
+  function upsertWorkoutSet(set) {
+    const sets = loadWorkoutSets();
+    const id = set.id || uid();
+    const next = {
+      id: id,
+      name: String(set.name || "Workout").trim() || "Workout",
+      createdAt: set.createdAt || Date.now(),
+      updatedAt: Date.now(),
+      exercises: Array.isArray(set.exercises) ? set.exercises.map(function (ex) {
+        return {
+          name: String(ex.name || "Exercise").trim() || "Exercise",
+          detail: String(ex.detail || "").trim(),
+          sets: ex.sets != null && !isNaN(+ex.sets) ? Math.max(0, Math.round(+ex.sets)) : null,
+          reps: ex.reps != null && !isNaN(+ex.reps) ? Math.max(0, Math.round(+ex.reps)) : null,
+          durationMin: ex.durationMin != null && !isNaN(+ex.durationMin) ? Math.max(0, Math.round(+ex.durationMin)) : null
+        };
+      }) : [],
+      estimateKcal: Math.max(0, Math.round(+set.estimateKcal || 0)),
+      kind: set.kind === "cardio" || set.kind === "mixed" ? set.kind : "lifting",
+      defaultExtraKcal: Math.max(0, Math.round(+set.defaultExtraKcal || 0)),
+      durationMin: set.durationMin != null && !isNaN(+set.durationMin) ? Math.max(0, Math.round(+set.durationMin)) : null,
+      notes: String(set.notes || "").trim()
+    };
+    if (!next.defaultExtraKcal) next.defaultExtraKcal = suggestedWorkoutExtra(next.estimateKcal, next.kind);
+    var idx = -1;
+    sets.forEach(function (s, i) { if (s.id === id) idx = i; });
+    if (idx >= 0) sets[idx] = next;
+    else sets.unshift(next);
+    saveWorkoutSets(sets);
+    return next;
+  }
+
+  function deleteWorkoutSet(id) {
+    saveWorkoutSets(loadWorkoutSets().filter(function (s) { return s.id !== id; }));
+  }
+
+  function suggestedWorkoutExtra(estimateKcal, kind) {
+    var est = Math.max(0, Math.round(+estimateKcal || 0));
+    var pct = 0.35;
+    if (kind === "cardio") pct = 0.1;
+    else if (kind === "mixed") pct = 0.25;
+    return Math.max(0, Math.round(est * pct));
+  }
+
   function allFoods() {
     return loadMyFoods().concat(FOODS);
   }
@@ -646,7 +723,38 @@ textarea{resize:vertical;min-height:56px}
   }
 
   function emptyDay() {
-    return { move: 0, workoutAdj: 0, workoutNote: "", meals: [] };
+    return { move: 0, workoutAdj: 0, workoutNote: "", workouts: [], meals: [] };
+  }
+
+  function normalizeWorkouts(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(function (w) {
+      return {
+        id: w.id || uid(),
+        setId: w.setId || null,
+        name: String(w.name || "Workout").trim() || "Workout",
+        at: w.at || Date.now(),
+        estimateKcal: Math.max(0, Math.round(+w.estimateKcal || 0)),
+        extraKcal: Math.max(0, Math.round(+w.extraKcal || 0)),
+        kind: w.kind === "cardio" || w.kind === "mixed" ? w.kind : "lifting"
+      };
+    });
+  }
+
+  function sumWorkoutExtra(d) {
+    return normalizeWorkouts(d && d.workouts).reduce(function (a, w) {
+      return a + (w.extraKcal || 0);
+    }, 0);
+  }
+
+  function syncWorkoutAdj(d) {
+    if (!d) return 0;
+    d.workouts = normalizeWorkouts(d.workouts);
+    var fromSessions = sumWorkoutExtra(d);
+    // Prefer session sum; fall back to legacy manual workoutAdj if no sessions yet
+    if (d.workouts.length) d.workoutAdj = fromSessions;
+    else d.workoutAdj = Math.max(0, Math.round(+d.workoutAdj || 0));
+    return d.workoutAdj;
   }
 
   function normalizeDb(raw) {
@@ -655,12 +763,15 @@ textarea{resize:vertical;min-height:56px}
     const days = {};
     Object.keys(raw.days).forEach(function (k) {
       const d = raw.days[k] || {};
-      days[k] = {
+      const row = {
         move: d.move || 0,
-        workoutAdj: d.workoutAdj || d.workoutAdj || 0,
-        workoutNote: d.workoutNote || d.workoutNote || "",
+        workoutAdj: d.workoutAdj || 0,
+        workoutNote: d.workoutNote || "",
+        workouts: normalizeWorkouts(d.workouts),
         meals: Array.isArray(d.meals) ? d.meals : []
       };
+      syncWorkoutAdj(row);
+      days[k] = row;
     });
     return { schema: SCHEMA, days: days };
   }
@@ -801,6 +912,7 @@ textarea{resize:vertical;min-height:56px}
       exportedAt: new Date().toISOString(),
       days: (loadAll() || {}).days || {},
       myFoods: loadMyFoods(),
+      workoutSets: loadWorkoutSets(),
       settings: loadSettings()
     };
   }
@@ -827,12 +939,23 @@ textarea{resize:vertical;min-height:56px}
           if (m.id && seen[m.id]) return;
           meals.push(m);
         });
-        merged.days[k] = {
+        const wo = normalizeWorkouts(a.workouts);
+        const woSeen = {};
+        wo.forEach(function (w) { if (w && w.id) woSeen[w.id] = true; });
+        normalizeWorkouts(b.workouts).forEach(function (w) {
+          if (!w) return;
+          if (w.id && woSeen[w.id]) return;
+          wo.push(w);
+        });
+        const row = {
           move: b.move != null ? b.move : (a.move || 0),
           workoutAdj: b.workoutAdj != null ? b.workoutAdj : (a.workoutAdj || 0),
           workoutNote: b.workoutNote != null ? b.workoutNote : (a.workoutNote || ""),
+          workouts: wo,
           meals: meals
         };
+        syncWorkoutAdj(row);
+        merged.days[k] = row;
       } else {
         merged.days[k] = normalizeDb({ days: { x: b || a } }).days.x;
       }
@@ -850,6 +973,16 @@ textarea{resize:vertical;min-height:56px}
         if (!byName[k]) mine.push(f);
       });
       saveMyFoods(mine.slice(0, 300));
+    }
+    if (Array.isArray(payload.workoutSets) && payload.workoutSets.length) {
+      const mine = loadWorkoutSets();
+      const byId = {};
+      mine.forEach(function (s) { if (s && s.id) byId[s.id] = s; });
+      payload.workoutSets.forEach(function (s) {
+        if (!s || !s.id) return;
+        if (!byId[s.id]) mine.push(s);
+      });
+      saveWorkoutSets(mine.slice(0, 100));
     }
     if (payload.settings && typeof payload.settings === "object") {
       const cur = loadSettings();
@@ -1475,11 +1608,13 @@ textarea{resize:vertical;min-height:56px}
     };
   }
 
-  // Nutritionist-style energy balance: intake vs estimated expenditure (BMR + Move).
+  // Nutritionist-style energy balance: intake vs estimated expenditure (BMR + Move + workout extra).
   // Move alone is NOT TDEE — it's activity burn above resting metabolism.
-  function energyMode(intake, move) {
+  // Workout "extra" is only the watch-undercount gap — not a full second estimate on top of Move.
+  function energyMode(intake, move, workoutExtra) {
     const body = bodyMetrics();
     const food = Math.round(+intake || 0);
+    const extra = Math.max(0, Math.round(+workoutExtra || 0));
     if (body.bmr == null) {
       return {
         net: null,
@@ -1495,10 +1630,11 @@ textarea{resize:vertical;min-height:56px}
       };
     }
     const burnMove = Math.round(+move);
-    const estimatedOut = body.bmr + burnMove;
+    const estimatedOut = body.bmr + burnMove + extra;
     const balance = food - estimatedOut; // − = deficit (Burning)
     const sign = balance > 0 ? ("+" + balance) : String(balance);
-    const base = "Food " + food + " vs ~" + estimatedOut + " out (BMR " + body.bmr + " + Move " + burnMove + ") · net " + sign + " kcal";
+    const extraBit = extra ? (" + workout extra " + extra) : "";
+    const base = "Food " + food + " vs ~" + estimatedOut + " out (BMR " + body.bmr + " + Move " + burnMove + extraBit + ") · net " + sign + " kcal";
 
     if (balance <= -200) {
       return { net: balance, label: "Burning", detail: base + " · deficit" };
@@ -1844,7 +1980,8 @@ textarea{resize:vertical;min-height:56px}
     if (pEatenEl) pEatenEl.textContent = String(prot);
     if (pBar) pBar.style.width = Math.min(100, Math.round((prot / PROTEIN_GOAL) * 100)) + "%";
     if (pCard) pCard.classList.toggle("over", prot > PROTEIN_GOAL);
-    const mode = energyMode(e, d.move);
+    syncWorkoutAdj(d);
+    const mode = energyMode(e, d.move, d.workoutAdj);
     const modeLabel = document.getElementById("modeLabel");
     const modeIcon = document.getElementById("modeIcon");
     const modeCard = document.getElementById("modeCard");
@@ -1884,9 +2021,8 @@ textarea{resize:vertical;min-height:56px}
         );
       }).join("");
     }
+    renderWorkoutCard();
   }
-
-  let calYear = null;
   let calMonth = null; // 0–11
   let histFocusKey = null;
 
@@ -1911,7 +2047,7 @@ textarea{resize:vertical;min-height:56px}
     const move = d.move;
     const hasSignal = food > 0 || (d.meals && d.meals.length) || (move != null && +move > 0);
     if (!hasSignal) return null;
-    const mode = energyMode(food, move);
+    const mode = energyMode(food, move, syncWorkoutAdj(d));
     if (mode.label === "Burning" || mode.label === "Maintain" || mode.label === "Bulking" || mode.label === "Fattening") {
       return mode.label;
     }
@@ -1943,7 +2079,7 @@ textarea{resize:vertical;min-height:56px}
     }
     const d = db.days[key];
     const e = eatenKcal(d);
-    const mode = energyMode(e, d.move);
+    const mode = energyMode(e, d.move, syncWorkoutAdj(d));
     const isToday = key === todayKey();
     const cls = modeCalClass(mode.label);
     host.innerHTML =
@@ -1955,7 +2091,7 @@ textarea{resize:vertical;min-height:56px}
       '<div class="stat"><p class="tiny">Move</p><p class="big">' + (d.move || "—") + "</p></div>" +
       '<div class="stat"><p class="tiny">Protein</p><p class="big">' + eatenProtein(d) + "g</p></div>" +
       "</div>" +
-      (d.workoutAdj ? '<p class="tiny" style="margin-top:8px">Lifting adj +' + d.workoutAdj + "</p>" : "") +
+      (d.workoutAdj ? '<p class="tiny" style="margin-top:8px">Workout extra +' + d.workoutAdj + " kcal (on top of Move)</p>" : "") +
       "<p class='tiny' style='margin-top:8px'>" + (d.meals || []).length + " meal(s) · " + BUDGET + " kcal budget</p>" +
       "</div>";
   }
@@ -2116,6 +2252,313 @@ textarea{resize:vertical;min-height:56px}
     document.getElementById("sheetNo").onclick = closeSheet;
   }
 
+  function localEstimateWorkout(text, kindHint) {
+    const body = bodyMetrics();
+    const kg = body.weightKg || 75;
+    const raw = String(text || "").toLowerCase();
+    var mins = 45;
+    var m = raw.match(/(\d+)\s*(?:min|mins|minutes|hr|hour|hours)/);
+    if (m) {
+      mins = +m[1];
+      if (/hr|hour/.test(m[0])) mins = mins * 60;
+    }
+    mins = Math.max(15, Math.min(180, mins));
+    var kind = kindHint || "lifting";
+    if (/run|jog|cycle|bike|swim|row|cardio|hiit|walk/.test(raw) && !/bench|squat|deadlift|press|curl|row\b/.test(raw)) kind = "cardio";
+    else if (/run|bike|swim|hiit/.test(raw) && /squat|bench|press|lift/.test(raw)) kind = "mixed";
+    // Rough MET kcal ≈ MET * kg * hours
+    var met = kind === "cardio" ? 7.5 : kind === "mixed" ? 6 : 5;
+    var estimate = Math.round(met * kg * (mins / 60));
+    return {
+      name: kind === "cardio" ? "Cardio session" : kind === "mixed" ? "Mixed session" : "Strength session",
+      kind: kind,
+      durationMin: mins,
+      estimateKcal: estimate,
+      defaultExtraKcal: suggestedWorkoutExtra(estimate, kind),
+      exercises: [{ name: "From notes", detail: String(text || "").trim().slice(0, 160), sets: null, reps: null, durationMin: mins }],
+      notes: "Local estimate (no Gemini)"
+    };
+  }
+
+  function parseWorkoutImage(dataUrl) {
+    const s = loadSettings();
+    if (!s.geminiKey || !s.useLlm) {
+      return Promise.resolve(localEstimateWorkout("strength training 45 min", "lifting"));
+    }
+    const body = bodyMetrics();
+    const model = encodeURIComponent(migrateGeminiModel(s.model || "gemini-2.5-flash"));
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+    const meta = "Body weight kg: " + (body.weightKg != null ? body.weightKg : "unknown") +
+      ". Sex: " + (body.sex || "unknown") + ". Age: " + (body.ageYears != null ? body.ageYears : "unknown") + ".";
+    const prompt =
+      "You read a handwritten or printed personal trainer workout plan photo.\n" +
+      "Return ONLY JSON (no markdown) with keys: name (short title), kind (lifting|cardio|mixed), durationMin (number), estimateKcal (conservative total session burn), exercises (array of {name, detail, sets, reps, durationMin}), notes (short).\n" +
+      "Rules: be conservative on estimateKcal; strength sessions are usually 150–450 kcal for ~45–75 min; do not invent cardio-level burns for lifting; include every exercise you can read; sets/reps as numbers or null; " + meta;
+    const pure = String(dataUrl || "");
+    const comma = pure.indexOf(",");
+    const b64 = comma >= 0 ? pure.slice(comma + 1) : pure;
+    const mime = (pure.match(/^data:([^;]+);/) || [])[1] || "image/jpeg";
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType: mime, data: b64 } }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: "application/json"
+        }
+      })
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error((data && data.error && data.error.message) || ("Gemini HTTP " + res.status));
+        return data;
+      });
+    }).then(function (data) {
+      const rawText = (((data.candidates || [])[0] || {}).content || {}).parts
+        ? data.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("")
+        : "";
+      var parsed;
+      try { parsed = JSON.parse(rawText); }
+      catch (e) {
+        const m = rawText.match(/\{[\s\S]*\}/);
+        if (!m) throw new Error("Gemini returned non-JSON");
+        parsed = JSON.parse(m[0]);
+      }
+      var kind = parsed.kind === "cardio" || parsed.kind === "mixed" ? parsed.kind : "lifting";
+      var estimate = Math.max(0, Math.round(+parsed.estimateKcal || 0));
+      if (!estimate) {
+        var fallback = localEstimateWorkout(parsed.name || "workout", kind);
+        estimate = fallback.estimateKcal;
+      }
+      return {
+        name: String(parsed.name || "Workout").trim() || "Workout",
+        kind: kind,
+        durationMin: parsed.durationMin != null && !isNaN(+parsed.durationMin) ? Math.max(0, Math.round(+parsed.durationMin)) : null,
+        estimateKcal: estimate,
+        defaultExtraKcal: suggestedWorkoutExtra(estimate, kind),
+        exercises: Array.isArray(parsed.exercises) ? parsed.exercises : [],
+        notes: String(parsed.notes || "").trim()
+      };
+    });
+  }
+
+  function logWorkoutSession(opts) {
+    const d = day();
+    if (!Array.isArray(d.workouts)) d.workouts = [];
+    d.workouts.push({
+      id: uid(),
+      setId: opts.setId || null,
+      name: opts.name || "Workout",
+      at: Date.now(),
+      estimateKcal: Math.max(0, Math.round(+opts.estimateKcal || 0)),
+      extraKcal: Math.max(0, Math.round(+opts.extraKcal || 0)),
+      kind: opts.kind === "cardio" || opts.kind === "mixed" ? opts.kind : "lifting"
+    });
+    syncWorkoutAdj(d);
+    if (opts.note) d.workoutNote = opts.note;
+    saveAll(db);
+  }
+
+  function removeWorkoutSession(id) {
+    const d = day();
+    d.workouts = normalizeWorkouts(d.workouts).filter(function (w) { return w.id !== id; });
+    syncWorkoutAdj(d);
+    saveAll(db);
+  }
+
+  function openWorkoutSetConfirm(draft, opts) {
+    opts = opts || {};
+    const moveNow = day().move || 0;
+    const extraDefault = draft.defaultExtraKcal != null
+      ? draft.defaultExtraKcal
+      : suggestedWorkoutExtra(draft.estimateKcal, draft.kind);
+    const exList = (draft.exercises || []).slice(0, 12).map(function (ex) {
+      var bits = [];
+      if (ex.sets) bits.push(ex.sets + "×");
+      if (ex.reps) bits.push(String(ex.reps));
+      if (ex.durationMin) bits.push(ex.durationMin + "m");
+      return "<div class='itemrow'><div>" + escapeHtml(ex.name || "Exercise") +
+        (ex.detail ? (" <span class='tiny'>" + escapeHtml(ex.detail) + "</span>") : "") +
+        "</div><b>" + escapeHtml(bits.join(" ") || "—") + "</b></div>";
+    }).join("");
+    openSheet(
+      '<p class="eyebrow">Workout set</p>' +
+      '<h2 style="margin:4px 0 8px">' + escapeHtml(draft.name || "Workout") + "</h2>" +
+      '<p class="muted">Kind: <b>' + escapeHtml(draft.kind || "lifting") + "</b>" +
+      (draft.durationMin ? (" · ~" + draft.durationMin + " min") : "") +
+      " · full estimate <b>" + (draft.estimateKcal || 0) + " kcal</b></p>" +
+      '<div class="note">Apple Move today is <b>' + (moveNow || "—") + "</b>. We only add a <b>conservative extra</b> Move likely missed — not the full estimate again.</div>" +
+      (exList || "<p class='tiny'>No exercises parsed — you can still save the set.</p>") +
+      '<label class="tiny" style="display:block;margin-top:10px">Extra kcal to count today (on top of Move)</label>' +
+      '<input type="number" id="woExtraInput" inputmode="numeric" value="' + extraDefault + '" />' +
+      '<div class="chips" style="margin-top:8px" id="woExtraChips"></div>' +
+      '<button class="btn primary" id="sheetOk" type="button">Save set &amp; log today</button>' +
+      '<button class="btn light" id="sheetSaveOnly" type="button">Save set only</button>' +
+      (opts.existingId ? '<button class="btn light" id="sheetLogOnly" type="button">Log today only</button>' : "") +
+      '<button class="btn ghost" id="sheetNo" type="button">Cancel</button>'
+    );
+    const chips = document.getElementById("woExtraChips");
+    chips.innerHTML = [0, 20, 40, 60, 80, extraDefault].filter(function (v, i, a) {
+      return a.indexOf(v) === i;
+    }).map(function (n) {
+      return '<button type="button" class="chip" data-x="' + n + '">+' + n + "</button>";
+    }).join("");
+    chips.onclick = function (e) {
+      const x = e.target.getAttribute("data-x");
+      if (x == null) return;
+      document.getElementById("woExtraInput").value = x;
+    };
+    function readExtra() {
+      const v = document.getElementById("woExtraInput").value;
+      return v === "" || isNaN(+v) ? 0 : Math.max(0, Math.round(+v));
+    }
+    function saveSet() {
+      draft.defaultExtraKcal = readExtra();
+      return upsertWorkoutSet(draft);
+    }
+    document.getElementById("sheetOk").onclick = function () {
+      const extra = readExtra();
+      const saved = saveSet();
+      logWorkoutSession({
+        setId: saved.id,
+        name: saved.name,
+        estimateKcal: saved.estimateKcal,
+        extraKcal: extra,
+        kind: saved.kind
+      });
+      closeSheet();
+      renderToday();
+      toast("Saved set · logged +" + extra + " extra kcal");
+    };
+    document.getElementById("sheetSaveOnly").onclick = function () {
+      saveSet();
+      closeSheet();
+      renderToday();
+      toast("Workout set saved");
+    };
+    var logOnly = document.getElementById("sheetLogOnly");
+    if (logOnly) {
+      logOnly.onclick = function () {
+        const extra = readExtra();
+        logWorkoutSession({
+          setId: opts.existingId || draft.id || null,
+          name: draft.name,
+          estimateKcal: draft.estimateKcal,
+          extraKcal: extra,
+          kind: draft.kind
+        });
+        closeSheet();
+        renderToday();
+        toast("Logged +" + extra + " extra kcal");
+      };
+    }
+    document.getElementById("sheetNo").onclick = closeSheet;
+  }
+
+  function renderWorkoutCard() {
+    const d = day();
+    syncWorkoutAdj(d);
+    const label = document.getElementById("workoutExtraLabel");
+    if (label) {
+      label.textContent = d.workoutAdj
+        ? ("+" + d.workoutAdj + " extra kcal")
+        : "No session";
+    }
+    const chips = document.getElementById("workoutSetChips");
+    if (chips) {
+      const sets = loadWorkoutSets();
+      if (!sets.length) {
+        chips.innerHTML = '<span class="tiny">No saved sets yet — add a trainer plan photo.</span>';
+      } else {
+        chips.innerHTML = sets.slice(0, 12).map(function (s) {
+          return '<button type="button" class="chip" data-set="' + s.id + '">' + escapeHtml(s.name) +
+            '<span class="tiny"> · ' + (s.estimateKcal || 0) + " est</span></button>";
+        }).join("") +
+          '<button type="button" class="chip ghost" data-manage="1">Manage</button>';
+      }
+    }
+    const list = document.getElementById("workoutTodayList");
+    if (list) {
+      const sessions = normalizeWorkouts(d.workouts);
+      if (!sessions.length) {
+        list.innerHTML = "";
+      } else {
+        list.innerHTML = sessions.map(function (w) {
+          return '<div class="itemrow"><div><b>' + escapeHtml(w.name) + "</b>" +
+            '<div class="tiny">est ' + w.estimateKcal + " · counted +" + w.extraKcal + "</div></div>" +
+            '<button type="button" class="chip ghost" data-del-wo="' + w.id + '" aria-label="Remove">✕</button></div>';
+        }).join("");
+      }
+    }
+  }
+
+  function openManageWorkoutSets() {
+    const sets = loadWorkoutSets();
+    openSheet(
+      '<p class="eyebrow">Library</p><h2 style="margin:4px 0 8px">Workout sets</h2>' +
+      (sets.length ? sets.map(function (s) {
+        return '<div class="itemrow"><div><b>' + escapeHtml(s.name) + "</b>" +
+          '<div class="tiny">' + (s.kind || "lifting") + " · est " + (s.estimateKcal || 0) +
+          " · default extra +" + (s.defaultExtraKcal || 0) + "</div></div>" +
+          '<button type="button" class="chip ghost" data-del-set="' + s.id + '">Delete</button></div>';
+      }).join("") : "<p class='muted'>No sets saved.</p>") +
+      '<button class="btn light" id="sheetNo" type="button">Close</button>'
+    );
+    document.querySelectorAll("[data-del-set]").forEach(function (btn) {
+      btn.onclick = function () {
+        deleteWorkoutSet(btn.getAttribute("data-del-set"));
+        openManageWorkoutSets();
+        renderWorkoutCard();
+        toast("Set deleted");
+      };
+    });
+    document.getElementById("sheetNo").onclick = closeSheet;
+  }
+
+  function handleWorkoutPhotoFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () {
+      const dataUrl = reader.result;
+      toast("Reading workout plan…");
+      // shrink for upload
+      const img = new Image();
+      img.onload = function () {
+        const max = 1280;
+        let w = img.width;
+        let h = img.height;
+        if (w > max || h > max) {
+          const s = Math.min(max / w, max / h);
+          w = Math.round(w * s);
+          h = Math.round(h * s);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        const small = canvas.toDataURL("image/jpeg", 0.75);
+        parseWorkoutImage(small).then(function (draft) {
+          openWorkoutSetConfirm(draft, {});
+        }).catch(function (err) {
+          toast(err.message || "Couldn’t read plan");
+          const fallback = localEstimateWorkout("strength 45 min", "lifting");
+          openWorkoutSetConfirm(fallback, {});
+        });
+      };
+      img.onerror = function () {
+        toast("Couldn’t load photo");
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  }
+
   function openMoveEditor() {
     const d = day();
     openSheet(
@@ -2162,11 +2605,16 @@ textarea{resize:vertical;min-height:56px}
 
   function openWorkoutEditor() {
     const d = day();
+    syncWorkoutAdj(d);
+    const hasSessions = normalizeWorkouts(d.workouts).length > 0;
     openSheet(
       '<p class="eyebrow">Lifting adjustment</p><h2 style="margin:4px 0 8px">Watch missed some?</h2>' +
       '<div class="note">Fitness Move already counts part of the gym session. Add only a <b>conservative extra</b> — not a full second workout estimate stacked on Move.</div>' +
+      (hasSessions
+        ? '<p class="tiny">Today already has workout sessions (+' + d.workoutAdj + ' kcal). Saving adds another manual extra on top.</p>'
+        : "") +
       '<label class="tiny">Extra kcal to note</label>' +
-      '<input type="number" id="woInput" inputmode="numeric" value="' + (d.workoutAdj || "") + '" placeholder="e.g. 40" />' +
+      '<input type="number" id="woInput" inputmode="numeric" value="' + (hasSessions ? "40" : (d.workoutAdj || "")) + '" placeholder="e.g. 40" />' +
       '<div class="chips" style="margin-top:10px">' +
       [20, 40, 60, 80].map(function (n) {
         return '<button type="button" class="chip" data-w="' + n + '">+' + n + "</button>";
@@ -2174,10 +2622,10 @@ textarea{resize:vertical;min-height:56px}
       "</div>" +
       '<label class="tiny" style="display:block;margin-top:8px">Note</label>' +
       '<input type="text" id="woNote" value="' + escapeHtml(d.workoutNote || "") + '" placeholder="e.g. squats + press" />' +
-      '<p class="tiny" style="margin-top:8px">This is a note for you. It does <b>not</b> raise the 1800 food budget.</p>' +
+      '<p class="tiny" style="margin-top:8px">Does <b>not</b> raise the 1800 food budget. Mode burn = BMR + Move + extras.</p>' +
       '<button class="btn primary" id="sheetOk" type="button">Save adjustment</button>' +
       '<button class="btn light" id="sheetNo" type="button">Cancel</button>' +
-      '<button class="btn ghost" id="sheetClear" type="button">Clear</button>'
+      '<button class="btn ghost" id="sheetClear" type="button">Clear all extras</button>'
     );
     document.querySelectorAll("[data-w]").forEach(function (b) {
       b.onclick = function () {
@@ -2186,18 +2634,35 @@ textarea{resize:vertical;min-height:56px}
     });
     document.getElementById("sheetOk").onclick = function () {
       const v = document.getElementById("woInput").value;
-      day().workoutAdj = v === "" || isNaN(+v) ? 0 : Math.max(0, Math.round(+v));
-      day().workoutNote = document.getElementById("woNote").value.trim();
-      saveAll(db);
+      const extra = v === "" || isNaN(+v) ? 0 : Math.max(0, Math.round(+v));
+      const note = document.getElementById("woNote").value.trim();
+      const cur = day();
+      cur.workoutNote = note;
+      if (normalizeWorkouts(cur.workouts).length) {
+        logWorkoutSession({
+          name: note || "Manual extra",
+          estimateKcal: 0,
+          extraKcal: extra,
+          kind: "lifting"
+        });
+      } else {
+        cur.workoutAdj = extra;
+        cur.workouts = [];
+        saveAll(db);
+      }
       closeSheet();
       renderToday();
+      toast(extra ? ("Extra +" + extra + " kcal") : "Extra cleared");
     };
     document.getElementById("sheetClear").onclick = function () {
-      day().workoutAdj = 0;
-      day().workoutNote = "";
+      const cur = day();
+      cur.workoutAdj = 0;
+      cur.workoutNote = "";
+      cur.workouts = [];
       saveAll(db);
       closeSheet();
       renderToday();
+      toast("Workout extras cleared");
     };
     document.getElementById("sheetNo").onclick = closeSheet;
   }
@@ -2255,6 +2720,44 @@ textarea{resize:vertical;min-height:56px}
 
   // --- wire UI ---
   document.getElementById("editMoveBtn").onclick = openMoveEditor;
+
+  document.getElementById("workoutManualBtn").onclick = openWorkoutEditor;
+
+  document.getElementById("workoutPhotoInput").onchange = function () {
+    const f = this.files && this.files[0];
+    this.value = "";
+    if (f) handleWorkoutPhotoFile(f);
+  };
+
+  document.getElementById("workoutSetChips").onclick = function (e) {
+    const btn = e.target.closest("[data-set], [data-manage]");
+    if (!btn) return;
+    if (btn.getAttribute("data-manage")) {
+      openManageWorkoutSets();
+      return;
+    }
+    const id = btn.getAttribute("data-set");
+    const set = loadWorkoutSets().filter(function (s) { return s.id === id; })[0];
+    if (!set) return;
+    openWorkoutSetConfirm({
+      id: set.id,
+      name: set.name,
+      kind: set.kind,
+      durationMin: set.durationMin,
+      estimateKcal: set.estimateKcal,
+      defaultExtraKcal: set.defaultExtraKcal != null ? set.defaultExtraKcal : suggestedWorkoutExtra(set.estimateKcal, set.kind),
+      exercises: set.exercises || [],
+      notes: set.notes || ""
+    }, { existingId: set.id });
+  };
+
+  document.getElementById("workoutTodayList").onclick = function (e) {
+    const id = e.target.getAttribute("data-del-wo");
+    if (!id) return;
+    removeWorkoutSession(id);
+    renderToday();
+    toast("Workout removed");
+  };
 
   document.getElementById("logBtn").onclick = async function () {
     const raw = document.getElementById("text").value;
