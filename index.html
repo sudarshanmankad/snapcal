@@ -1017,19 +1017,49 @@ textarea{resize:vertical;min-height:56px}
     return best;
   }
 
-  // Stable Gemini parses: same sentence → same macros (temp 0 + short cache).
+  // Same-sentence cache so re-parses stay stable (without brittle seed/topK clamps).
   var geminiParseCache = {};
   function mealCacheKey(text) {
     return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
   }
-  function simpleSeed(text) {
-    var h = 2166136261;
-    var s = mealCacheKey(text);
-    for (var i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      h = Math.imul(h, 16777619);
+
+  function unwrapGeminiFoods(parsed) {
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === "object") {
+      if (Array.isArray(parsed.items)) return parsed.items;
+      if (Array.isArray(parsed.foods)) return parsed.foods;
+      if (Array.isArray(parsed.food)) return parsed.food;
+      if (Array.isArray(parsed.meals)) return parsed.meals;
     }
-    return (h >>> 0) % 2147483647;
+    return null;
+  }
+
+  function mapGeminiFoodRows(rows) {
+    return (rows || []).map(function (row) {
+      function numOrNull(v) {
+        if (v == null || v === "") return null;
+        const n = +v;
+        return isNaN(n) ? null : Math.max(0, Math.round(n * 10) / 10);
+      }
+      var prot = numOrNull(row.protein);
+      var name = String(row.name || row.food || row.title || row.detail || row.description || "").trim();
+      var detail = String(row.detail || row.description || name || "").trim();
+      if (!name && !detail) return null;
+      return {
+        name: name || detail || "Food",
+        detail: detail || name || "Food",
+        kcal: Math.max(0, Math.round(+row.kcal || +row.calories || 0)),
+        grams: numOrNull(row.grams != null ? row.grams : row.g),
+        protein: prot,
+        carbs: numOrNull(row.carbs != null ? row.carbs : row.carbohydrates),
+        fat: numOrNull(row.fat),
+        grade: row.grade === "said" || row.grade === "grams" ? row.grade : "llm",
+        warn: row.warn || (prot == null
+          ? "Gemini omitted protein — re-parse or edit."
+          : "Gemini estimate — confirm before trusting.")
+      };
+    // Keep 0-kcal items (pre-workout, zero-cal drinks, etc.). Drop only blank rows.
+    }).filter(Boolean);
   }
 
   function parseWithGemini(text) {
@@ -1046,119 +1076,97 @@ textarea{resize:vertical;min-height:56px}
     const model = encodeURIComponent(migrateGeminiModel(s.model || "gemini-2.5-flash"));
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
     const prompt =
-      "You are a nutrition estimator. Be DETERMINISTIC and CONSISTENT: the same meal sentence must produce the same foods and macros every time.\n" +
-      "The user typed a free-form meal. Estimate every food yourself — do NOT use a fixed catalog.\n" +
+      "You are a nutrition estimator for a calorie tracker.\n" +
+      "The user typed a free-form meal or product. Estimate every edible yourself — do NOT use a fixed catalog.\n" +
       "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
-      "CRITICAL: every object MUST include a numeric protein in grams (use 0 only if the food truly has none). Protein is as important as kcal.\n" +
-      "Use stable round numbers (whole kcal; protein/carbs/fat to 0 or 1 decimal). Prefer common USDA-like defaults when unsure rather than inventing a new number each time.\n" +
-      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (typical whey ~80% protein); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
+      "CRITICAL: every object MUST include numeric protein in grams (0 only if truly none). Protein is as important as kcal.\n" +
+      "Include branded products, Costco items, pre-workout, creatine, vitamins, and supplements. If a serving is ~0 kcal, still return it with kcal 0 and best-guess macros.\n" +
+      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (typical whey ~80% protein); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods or supplements.\n" +
       "Meal: " + text;
-    return fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0,
-          topP: 0.1,
-          topK: 1,
-          seed: simpleSeed(text),
-          responseMimeType: "application/json"
-        }
-      })
-    }).then(function (res) {
-      return res.json().then(function (data) {
-        if (!res.ok) {
-          const msg = (data && data.error && data.error.message) || ("Gemini HTTP " + res.status);
-          // Some models reject seed — retry once without it
-          if (/seed/i.test(msg)) {
-            return fetch(url, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                generationConfig: {
-                  temperature: 0,
-                  topP: 0.1,
-                  topK: 1,
-                  responseMimeType: "application/json"
-                }
-              })
-            }).then(function (res2) {
-              return res2.json().then(function (data2) {
-                if (!res2.ok) {
-                  throw new Error((data2 && data2.error && data2.error.message) || ("Gemini HTTP " + res2.status));
-                }
-                return data2;
-              });
-            });
+
+    function postGemini(generationConfig) {
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: generationConfig
+        })
+      }).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) {
+            throw new Error((data && data.error && data.error.message) || ("Gemini HTTP " + res.status));
           }
-          throw new Error(msg);
-        }
-        return data;
+          return data;
+        });
       });
+    }
+
+    function itemsFromResponse(data) {
+      const cand = (data.candidates || [])[0] || {};
+      const finish = cand.finishReason || "";
+      const rawText = (cand.content && cand.content.parts)
+        ? cand.content.parts.map(function (p) { return p.text || ""; }).join("")
+        : "";
+      if (!rawText) {
+        throw new Error(finish && finish !== "STOP"
+          ? ("Gemini blocked/empty response (" + finish + ")")
+          : "Gemini returned an empty response");
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(rawText);
+      } catch (e) {
+        const m = rawText.match(/\[[\s\S]*\]/) || rawText.match(/\{[\s\S]*\}/);
+        if (!m) throw new Error("Gemini returned non-JSON");
+        parsed = JSON.parse(m[0]);
+      }
+      const rows = unwrapGeminiFoods(parsed);
+      if (!rows) throw new Error("Gemini JSON was not a food list");
+      return mapGeminiFoodRows(rows);
+    }
+
+    // Use the same simple JSON config that worked before the "stabilize" clamp/seed change.
+    // Retry once with temperature 0 if the first pass returns nothing usable.
+    return postGemini({
+      temperature: 0.2,
+      responseMimeType: "application/json"
     }).then(function (data) {
-        const rawText = (((data.candidates || [])[0] || {}).content || {}).parts
-          ? data.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("")
-          : "";
-        let parsed;
-        try {
-          parsed = JSON.parse(rawText);
-        } catch (e) {
-          const m = rawText.match(/\[[\s\S]*\]/);
-          if (!m) throw new Error("Gemini returned non-JSON");
-          parsed = JSON.parse(m[0]);
-        }
-        if (!Array.isArray(parsed)) throw new Error("Gemini JSON was not an array");
-        var items = parsed.map(function (row) {
-          function numOrNull(v) {
-            if (v == null || v === "") return null;
-            const n = +v;
-            return isNaN(n) ? null : Math.max(0, Math.round(n * 10) / 10);
-          }
-          var prot = numOrNull(row.protein);
-          return {
-            name: String(row.name || "Food").trim(),
-            detail: String(row.detail || row.name || "Food").trim(),
-            kcal: Math.max(0, Math.round(+row.kcal || 0)),
-            grams: numOrNull(row.grams),
-            protein: prot,
-            carbs: numOrNull(row.carbs),
-            fat: numOrNull(row.fat),
-            grade: row.grade === "said" || row.grade === "grams" ? row.grade : "llm",
-            warn: row.warn || (prot == null
-              ? "Gemini omitted protein — re-parse or edit."
-              : "Gemini estimate — confirm before trusting.")
-          };
-        }).filter(function (i) { return i.kcal > 0; });
-        if (cacheKey && items.length) geminiParseCache[cacheKey] = items;
-        return items;
+      var items = itemsFromResponse(data);
+      if (items.length) return items;
+      return postGemini({
+        temperature: 0,
+        responseMimeType: "application/json"
+      }).then(function (data2) {
+        return itemsFromResponse(data2);
+      });
+    }).then(function (items) {
+      if (cacheKey && items.length) geminiParseCache[cacheKey] = items;
+      return items;
     });
   }
 
   async function parseChatSmart(raw) {
     const s = loadSettings();
-    // LLM-first: when Gemini is configured, the model invents the meal list
-    // (no built-in catalog matching). Local parse is offline / no-key fallback only.
+    // LLM-first: when Gemini is configured, the model invents the meal list.
+    // Do not silently fall back to the built-in catalog (that hides Gemini failures).
     if (s.geminiKey && s.useLlm) {
       try {
         const llmItems = await parseWithGemini(raw);
         if (llmItems && llmItems.length) {
           return { items: applySaidProteinFromRaw(raw, llmItems), unknown: [], sourceNote: "gemini" };
         }
-        const localEmpty = parseChat(raw);
         return {
-          items: localEmpty.items,
-          unknown: localEmpty.unknown,
-          sourceNote: "local",
-          llmError: "Gemini returned no foods — fell back to built-in list."
+          items: [],
+          unknown: [String(raw || "").trim()].filter(Boolean),
+          sourceNote: "gemini-empty",
+          llmError: "Gemini returned no foods."
         };
       } catch (err) {
-        const localFail = parseChat(raw);
         return {
-          items: localFail.items,
-          unknown: localFail.unknown,
-          sourceNote: "local",
+          items: [],
+          unknown: [String(raw || "").trim()].filter(Boolean),
+          sourceNote: "gemini-error",
           llmError: String(err.message || err)
         };
       }
@@ -1172,6 +1180,87 @@ textarea{resize:vertical;min-height:56px}
         ? "Gemini is off in Setup — using built-in list only."
         : "Add a Gemini API key in Setup so chat can estimate any meal from your sentence."
     };
+  }
+
+  // Keep Setup form + stored key in sync (iOS often shows the password box empty).
+  function syncAiSettingsFromForm() {
+    var keyEl = document.getElementById("geminiKey");
+    var modelEl = document.getElementById("geminiModel");
+    var useEl = document.getElementById("useLlm");
+    var typed = keyEl ? keyEl.value.trim() : "";
+    var patch = {
+      model: modelEl && modelEl.value.trim() ? modelEl.value.trim() : "gemini-2.5-flash",
+      useLlm: useEl ? !!useEl.checked : true
+    };
+    if (typed) patch.geminiKey = typed;
+    saveSettings(patch);
+    renderSetupAi();
+    return loadSettings();
+  }
+
+  // Shared health check used by Setup → Test Gemini and by Parse & confirm.
+  // Returns { ok, model, reply, error }.
+  async function testGeminiHealth(opts) {
+    opts = opts || {};
+    const s = loadSettings();
+    const status = document.getElementById("aiTestStatus");
+    if (!s.geminiKey) {
+      const msg = "No Gemini key saved — paste one from Google AI Studio in Setup.";
+      if (status) status.textContent = msg;
+      return { ok: false, error: msg };
+    }
+    if (s.geminiKey.indexOf("AIza") !== 0 && status && !opts.quiet) {
+      status.textContent = "This key does not look like a Gemini API key (usually starts with AIza).";
+    }
+    const modelsTry = [];
+    const preferred = migrateGeminiModel(s.model || "gemini-2.5-flash");
+    modelsTry.push(preferred);
+    ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"].forEach(function (m) {
+      if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
+    });
+    let lastErr = null;
+    let okText = "";
+    let usedModel = preferred;
+    for (let i = 0; i < modelsTry.length; i++) {
+      usedModel = modelsTry[i];
+      if (status && !opts.quiet) status.textContent = "Calling " + usedModel + "…";
+      try {
+        const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(usedModel) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: "Reply with exactly: OK" }] }],
+            generationConfig: { temperature: 0, maxOutputTokens: 16 }
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          lastErr = (data && data.error && data.error.message) || ("HTTP " + res.status);
+          if (/API key|API_KEY|permission|403|401/i.test(lastErr)) break;
+          continue;
+        }
+        okText = ((((data.candidates || [])[0] || {}).content || {}).parts || [])
+          .map(function (p) { return p.text || ""; }).join("").trim();
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = String(err.message || err);
+      }
+    }
+    if (lastErr) {
+      if (status) status.textContent = "Gemini failed: " + lastErr + " — Use Show to verify key starts with AIza, then Save & Test again.";
+      return { ok: false, error: lastErr, model: usedModel };
+    }
+    if (usedModel !== s.model) {
+      saveSettings({ model: usedModel });
+      const modelEl = document.getElementById("geminiModel");
+      if (modelEl) modelEl.value = usedModel;
+    }
+    if (status) {
+      status.textContent = "Gemini working ✓ (" + usedModel + ")" + (okText ? (" — " + okText.slice(0, 40)) : "");
+    }
+    return { ok: true, model: usedModel, reply: okText };
   }
 
   function parseChat(raw) {
@@ -2259,28 +2348,42 @@ textarea{resize:vertical;min-height:56px}
   document.getElementById("logBtn").onclick = async function () {
     const raw = document.getElementById("text").value;
     const btn = document.getElementById("logBtn");
-    const s = loadSettings();
-    if (s.geminiKey && s.useLlm) {
-      btn.disabled = true;
-      btn.textContent = "Asking Gemini…";
-    } else {
-      toast("Tip: add a Gemini key in Setup so protein comes from AI for anything you type");
+    if (!String(raw || "").trim()) {
+      toast("Type a meal first");
+      return;
     }
+    // Parse always goes through Gemini: health-check first so a dead key never
+    // silently falls back to the built-in catalog (0 kcal / “couldn’t match”).
+    const s = syncAiSettingsFromForm();
+    if (!s.useLlm) {
+      toast("Turn on “Use Gemini for chat” in Setup — Parse needs AI.");
+      return;
+    }
+    if (!s.geminiKey) {
+      toast("Add a Gemini key in Setup, then Parse again.");
+      return;
+    }
+    btn.disabled = true;
     try {
+      btn.textContent = "Testing Gemini…";
+      const health = await testGeminiHealth({ quiet: true });
+      if (!health.ok) {
+        toast("Gemini not working — fix key in Setup before parsing. " + (health.error || ""));
+        return;
+      }
+      btn.textContent = "Asking Gemini…";
       const parsed = await parseChatSmart(raw);
-      if (parsed.llmError) toast(parsed.llmError);
-      if (parsed.unknown && parsed.unknown.length && (!parsed.items || !parsed.items.length)) {
-        toast("Couldn’t parse that. Add a Gemini key in Setup for free-form meals.");
+      const fromGemini = parsed.sourceNote === "gemini";
+      if (!fromGemini || !(parsed.items && parsed.items.length)) {
+        toast(parsed.llmError || "Gemini did not return foods — not opening confirm.");
+        return;
       }
-      const fromGemini = parsed.sourceNote && parsed.sourceNote.indexOf("gemini") >= 0;
-      if (fromGemini) {
-        const miss = (parsed.items || []).filter(function (i) { return i.protein == null || isNaN(+i.protein); });
-        if (miss.length) toast("Gemini missed protein on " + miss.length + " item(s) — check confirm sheet");
-      }
+      const miss = parsed.items.filter(function (i) { return i.protein == null || isNaN(+i.protein); });
+      if (miss.length) toast("Gemini missed protein on " + miss.length + " item(s) — check confirm sheet");
       confirmMeal({
         items: parsed.items,
         unknown: parsed.unknown,
-        source: fromGemini ? "chat-ai" : "chat"
+        source: "chat-ai"
       });
     } finally {
       btn.disabled = false;
@@ -2317,76 +2420,14 @@ textarea{resize:vertical;min-height:56px}
   };
 
   document.getElementById("testAiBtn").onclick = async function () {
-    // Save form first; blank key field keeps whatever is already stored.
-    var typed = document.getElementById("geminiKey").value.trim();
-    var patch = {
-      model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
-      useLlm: document.getElementById("useLlm").checked
-    };
-    if (typed) patch.geminiKey = typed;
-    saveSettings(patch);
-    renderSetupAi();
-    const s = loadSettings();
-    const status = document.getElementById("aiTestStatus");
+    syncAiSettingsFromForm();
     const btn = document.getElementById("testAiBtn");
-    if (!s.geminiKey) {
-      if (status) status.textContent = "No key saved — paste a key from Google AI Studio first.";
-      toast("Paste a Gemini key first");
-      return;
-    }
-    if (s.geminiKey.indexOf("AIza") !== 0) {
-      if (status) status.textContent = "This key does not look like a Gemini API key (usually starts with AIza). Re-copy from AI Studio.";
-    }
     btn.disabled = true;
     btn.textContent = "Testing…";
-    if (status) status.textContent = "Calling Gemini…";
     try {
-      const modelsTry = [];
-      const preferred = migrateGeminiModel(s.model || "gemini-2.5-flash");
-      modelsTry.push(preferred);
-      ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"].forEach(function (m) {
-        if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
-      });
-      let lastErr = null;
-      let okText = "";
-      let usedModel = preferred;
-      for (let i = 0; i < modelsTry.length; i++) {
-        usedModel = modelsTry[i];
-        if (status) status.textContent = "Calling " + usedModel + "…";
-        const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(usedModel) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: "Reply with exactly: OK" }] }],
-            generationConfig: { temperature: 0, maxOutputTokens: 16 }
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          lastErr = (data && data.error && data.error.message) || ("HTTP " + res.status);
-          // Invalid key — no point trying other models
-          if (/API key|API_KEY|permission|403|401/i.test(lastErr)) break;
-          continue;
-        }
-        okText = ((((data.candidates || [])[0] || {}).content || {}).parts || [])
-          .map(function (p) { return p.text || ""; }).join("").trim();
-        lastErr = null;
-        break;
-      }
-      if (lastErr) throw new Error(lastErr);
-      // Persist working model
-      if (usedModel !== s.model) {
-        saveSettings({ model: usedModel });
-        const modelEl = document.getElementById("geminiModel");
-        if (modelEl) modelEl.value = usedModel;
-      }
-      if (status) status.textContent = "Gemini working ✓ (" + usedModel + ")" + (okText ? (" — " + okText.slice(0, 40)) : "");
-      toast("Gemini is working");
-    } catch (err) {
-      const msg = String(err.message || err);
-      if (status) status.textContent = "Gemini failed: " + msg + " — Use Show to verify key starts with AIza, then Save & Test again.";
-      toast("Gemini failed — see status under Test");
+      const health = await testGeminiHealth({});
+      if (health.ok) toast("Gemini is working");
+      else toast("Gemini failed — see status under Test");
     } finally {
       btn.disabled = false;
       btn.textContent = "Test Gemini";
