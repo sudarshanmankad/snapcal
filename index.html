@@ -227,7 +227,7 @@ textarea{resize:vertical;min-height:56px}
 
   <div class="card">
     <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed" style="min-height:56px;margin:0"></textarea>
-    <button class="btn primary" id="logBtn" type="button" style="margin-top:6px">Parse &amp; confirm</button>
+    <button class="btn primary" id="logBtn" type="button" style="margin-top:6px">Parse with Gemini</button>
     <p class="tiny hide" id="chatHint"></p>
   </div>
 
@@ -325,7 +325,9 @@ textarea{resize:vertical;min-height:56px}
     <button class="btn primary" id="saveAiBtn" type="button">Save AI settings</button>
     <button class="btn light" id="testAiBtn" type="button">Test Gemini</button>
     <button class="btn light" id="clearAiBtn" type="button">Remove key</button>
+    <button class="btn light" id="forceRefreshBtn" type="button">Force refresh app</button>
     <p class="tiny" style="margin-top:8px" id="aiTestStatus"></p>
+    <p class="tiny" style="margin-top:6px" id="appVersionLabel">App build: …</p>
     <p class="tiny" style="margin-top:8px">Get a key: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> (keys usually start with <code>AIza</code>). Free tier is enough for meal chat. Key stays in Safari localStorage.</p>
   </div>
   <div class="card">
@@ -616,6 +618,8 @@ textarea{resize:vertical;min-height:56px}
       }, 0);
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
+    const ver = document.getElementById("appVersionLabel");
+    if (ver) ver.textContent = "App build: v41 · Gemini Parse fix — if Parse still says “Couldn’t match”, tap Force refresh app below.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -1073,18 +1077,25 @@ textarea{resize:vertical;min-height:56px}
         return out;
       }));
     }
-    const model = encodeURIComponent(migrateGeminiModel(s.model || "gemini-2.5-flash"));
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+    // Same model fallback list as Test Gemini — Test can pass on model #2 while
+    // Parse used to fail forever on a dead saved model name.
+    const modelsTry = [];
+    const preferred = migrateGeminiModel(s.model || "gemini-2.5-flash");
+    modelsTry.push(preferred);
+    ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"].forEach(function (m) {
+      if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
+    });
     const prompt =
       "You are a nutrition estimator for a calorie tracker.\n" +
       "The user typed a free-form meal or product. Estimate every edible yourself — do NOT use a fixed catalog.\n" +
       "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
       "CRITICAL: every object MUST include numeric protein in grams (0 only if truly none). Protein is as important as kcal.\n" +
-      "Include branded products, Costco items, pre-workout, creatine, vitamins, and supplements. If a serving is ~0 kcal, still return it with kcal 0 and best-guess macros.\n" +
+      "Include branded products, Costco items, pre-workout (e.g. Hyde), creatine, vitamins, and supplements. If a serving is ~0 kcal, still return it with kcal 0 and best-guess macros.\n" +
       "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (typical whey ~80% protein); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods or supplements.\n" +
       "Meal: " + text;
 
-    function postGemini(generationConfig) {
+    function postGemini(modelName, generationConfig) {
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(modelName) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
       return fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1126,21 +1137,41 @@ textarea{resize:vertical;min-height:56px}
       return mapGeminiFoodRows(rows);
     }
 
-    // Use the same simple JSON config that worked before the "stabilize" clamp/seed change.
-    // Retry once with temperature 0 if the first pass returns nothing usable.
-    return postGemini({
-      temperature: 0.2,
-      responseMimeType: "application/json"
-    }).then(function (data) {
-      var items = itemsFromResponse(data);
-      if (items.length) return items;
-      return postGemini({
-        temperature: 0,
+    // Simple JSON config (no seed/topK). Try each model until one returns foods.
+    function tryModel(i, lastErr) {
+      if (i >= modelsTry.length) {
+        return Promise.reject(new Error(lastErr || "Gemini returned no foods"));
+      }
+      const modelName = modelsTry[i];
+      return postGemini(modelName, {
+        temperature: 0.2,
         responseMimeType: "application/json"
-      }).then(function (data2) {
-        return itemsFromResponse(data2);
+      }).then(function (data) {
+        var items = itemsFromResponse(data);
+        if (items.length) {
+          if (modelName !== s.model) {
+            saveSettings({ model: modelName });
+            var modelEl = document.getElementById("geminiModel");
+            if (modelEl) modelEl.value = modelName;
+          }
+          return items;
+        }
+        return postGemini(modelName, {
+          temperature: 0,
+          responseMimeType: "application/json"
+        }).then(function (data2) {
+          var items2 = itemsFromResponse(data2);
+          if (items2.length) return items2;
+          return tryModel(i + 1, "Gemini returned no foods");
+        });
+      }).catch(function (err) {
+        var msg = String(err.message || err);
+        if (/API key|API_KEY|permission|403|401/i.test(msg)) throw err;
+        return tryModel(i + 1, msg);
       });
-    }).then(function (items) {
+    }
+
+    return tryModel(0).then(function (items) {
       if (cacheKey && items.length) geminiParseCache[cacheKey] = items;
       return items;
     });
@@ -2387,7 +2418,7 @@ textarea{resize:vertical;min-height:56px}
       });
     } finally {
       btn.disabled = false;
-      btn.textContent = "Parse & confirm";
+      btn.textContent = "Parse with Gemini";
     }
   };
 
@@ -2801,17 +2832,43 @@ textarea{resize:vertical;min-height:56px}
     if (e.target.id === "sheet") closeSheet();
   });
 
-  // service worker — force update so Home Screen / Safari drop stale shells (e.g. duplicate Paste)
+  // service worker — force update so Home Screen drops stale shells
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./sw.js").then(function (reg) {
+    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).then(function (reg) {
       try { reg.update(); } catch (e) {}
     }).catch(function () {});
     var refreshing = false;
-    navigator.serviceWorker.addEventListener("controllerchange", function () {
+    function reloadOnce() {
       if (refreshing) return;
       refreshing = true;
       location.reload();
+    }
+    navigator.serviceWorker.addEventListener("controllerchange", reloadOnce);
+    navigator.serviceWorker.addEventListener("message", function (ev) {
+      if (ev.data && ev.data.type === "SNAPCAL_SW_UPDATED") reloadOnce();
     });
+  }
+
+  var forceRefreshBtn = document.getElementById("forceRefreshBtn");
+  if (forceRefreshBtn) {
+    forceRefreshBtn.onclick = function () {
+      forceRefreshBtn.disabled = true;
+      forceRefreshBtn.textContent = "Refreshing…";
+      toast("Clearing cache and reloading…");
+      var done = function () { location.reload(true); };
+      if (!("serviceWorker" in navigator)) {
+        done();
+        return;
+      }
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all(regs.map(function (r) { return r.unregister(); }));
+      }).then(function () {
+        if (!window.caches || !caches.keys) return;
+        return caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        });
+      }).then(done).catch(done);
+    };
   }
 
   ensureMoveDefaults();
