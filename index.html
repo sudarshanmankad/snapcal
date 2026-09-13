@@ -78,6 +78,42 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 @media (prefers-reduced-motion:reduce){
   .mode-burn .mode-icon svg,.mode-bulk .mode-icon svg,.mode-fat .mode-icon svg{animation:none}
 }
+.cal-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 10px}
+.cal-stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;text-align:center}
+.cal-stat .big{font-size:22px}
+.cal-stat.burn .big{color:#b33a12}
+.cal-stat.not .big{color:#a33a30}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-dow{text-align:center;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.04em;padding:4px 0}
+.cal-day{
+  aspect-ratio:1;border-radius:12px;border:1px solid transparent;background:#f7f2ec;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  font-size:12px;font-weight:700;color:var(--muted);min-height:40px;padding:2px;
+  width:100%;margin:0;font:inherit;line-height:1.1;-webkit-appearance:none;appearance:none;
+}
+.cal-day.on{cursor:pointer;color:var(--ink)}
+.cal-day.on:active{transform:scale(.96)}
+.cal-day.mute{opacity:.35}
+.cal-day.today{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cal-day.sel{outline:2px solid var(--ink);outline-offset:1px}
+.cal-day .dot{width:7px;height:7px;border-radius:99px;background:transparent}
+.cal-day.burn{background:#ffe0c8;border-color:#f0c4a4;color:#b33a12}
+.cal-day.burn .dot{background:#d84315}
+.cal-day.ok{background:#d8ebe2;border-color:#b5d4c6;color:#245245}
+.cal-day.ok .dot{background:#2f6f5e}
+.cal-day.bulk{background:#ffe9b8;border-color:#e8d090;color:#7a5414}
+.cal-day.bulk .dot{background:#9a6b1f}
+.cal-day.fat{background:#ffd6d0;border-color:#f0b8b0;color:#a33a30}
+.cal-day.fat .dot{background:#c44a3a}
+.cal-legend{display:flex;flex-wrap:wrap;gap:8px 12px;margin-top:12px}
+.cal-legend span{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:650;color:var(--muted)}
+.cal-legend i{width:8px;height:8px;border-radius:99px;display:inline-block}
+.cal-legend i.burn{background:#d84315}
+.cal-legend i.ok{background:#2f6f5e}
+.cal-legend i.bulk{background:#9a6b1f}
+.cal-legend i.fat{background:#c44a3a}
+.cal-breakdown{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.cal-breakdown .chip{padding:6px 10px;min-height:0;font-size:11px}
 .compact-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
 .compact-actions .chip{padding:6px 10px;min-height:32px;font-size:12px}
 .compact-actions .btn{width:auto;margin:0;padding:6px 12px;min-height:32px;font-size:12px;border-radius:12px}
@@ -243,8 +279,24 @@ textarea{resize:vertical;min-height:56px}
 <section id="historyView" class="panel hide">
   <p class="eyebrow">Log</p>
   <h1 style="margin:4px 0 8px;font-size:28px">History</h1>
-  <p class="muted">On this phone only. Today first; older days keep their totals.</p>
-  <div id="historyList"></div>
+  <p class="muted">Month trend by mode — tap a day for details. On this phone only.</p>
+  <div class="card" id="calCard">
+    <div class="row">
+      <button type="button" class="chip ghost" id="calPrev" aria-label="Previous month">‹</button>
+      <p class="big" id="calTitle" style="flex:1;text-align:center;margin:0">—</p>
+      <button type="button" class="chip ghost" id="calNext" aria-label="Next month">›</button>
+    </div>
+    <div class="cal-stats" id="calStats"></div>
+    <div class="cal-breakdown" id="calBreakdown"></div>
+    <div class="cal-grid" id="calGrid" style="margin-top:12px"></div>
+    <div class="cal-legend" id="calLegend">
+      <span><i class="burn"></i>Burning</span>
+      <span><i class="ok"></i>Maintain</span>
+      <span><i class="bulk"></i>Bulking</span>
+      <span><i class="fat"></i>Fattening</span>
+    </div>
+  </div>
+  <div id="historyDetail"></div>
 </section>
 
 <section id="setupView" class="panel hide">
@@ -1835,31 +1887,148 @@ textarea{resize:vertical;min-height:56px}
     }
   }
 
-  function renderHistory() {
-    const keys = Object.keys(db.days).sort().reverse();
-    const host = document.getElementById("historyList");
-    if (!keys.length) {
-      host.innerHTML = "<div class='card'><p class='muted'>Nothing logged yet.</p></div>";
+  let calYear = null;
+  let calMonth = null; // 0–11
+  let histFocusKey = null;
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+
+  function ymdKey(y, m0, d) {
+    return y + "-" + pad2(m0 + 1) + "-" + pad2(d);
+  }
+
+  function monthTitle(y, m0) {
+    try {
+      return new Date(y, m0, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
+    } catch (e) {
+      return (m0 + 1) + "/" + y;
+    }
+  }
+
+  // Resolved trend mode for a stored day, or null if incomplete / empty.
+  function dayTrendMode(d) {
+    if (!d) return null;
+    const food = eatenKcal(d);
+    const move = d.move;
+    const hasSignal = food > 0 || (d.meals && d.meals.length) || (move != null && +move > 0);
+    if (!hasSignal) return null;
+    const mode = energyMode(food, move);
+    if (mode.label === "Burning" || mode.label === "Maintain" || mode.label === "Bulking" || mode.label === "Fattening") {
+      return mode.label;
+    }
+    return null;
+  }
+
+  function modeCalClass(label) {
+    if (label === "Burning") return "burn";
+    if (label === "Maintain") return "ok";
+    if (label === "Bulking") return "bulk";
+    if (label === "Fattening") return "fat";
+    return "";
+  }
+
+  function ensureCalCursor() {
+    if (calYear == null || calMonth == null) {
+      const now = new Date();
+      calYear = now.getFullYear();
+      calMonth = now.getMonth();
+    }
+  }
+
+  function renderHistoryDetail(key) {
+    const host = document.getElementById("historyDetail");
+    if (!host) return;
+    if (!key || !db.days[key]) {
+      host.innerHTML = "<p class='muted' style='margin:8px 2px'>Tap a colored day to see that day's totals.</p>";
       return;
     }
-    host.innerHTML = keys.map(function (k) {
-      const d = db.days[k];
-      const e = eatenKcal(d);
-      const isToday = k === todayKey();
-      return (
-        '<div class="card">' +
-        '<div class="row"><b>' + k + (isToday ? " · today" : "") + "</b>" +
-        '<span class="badge">' + e + " / " + BUDGET + "</span></div>" +
-        '<div class="statgrid" style="margin-top:10px">' +
-        '<div class="stat"><p class="tiny">Eaten</p><p class="big">' + e + "</p></div>" +
-        '<div class="stat"><p class="tiny">Move</p><p class="big">' + (d.move || "—") + "</p></div>" +
-        '<div class="stat"><p class="tiny">Protein</p><p class="big">' + eatenProtein(d) + "g</p></div>" +
-        "</div>" +
-        (d.workoutAdj ? '<p class="tiny" style="margin-top:8px">Lifting adj +' + d.workoutAdj + "</p>" : "") +
-        "<p class='tiny' style='margin-top:8px'>" + (d.meals || []).length + " meal(s)</p>" +
-        "</div>"
-      );
+    const d = db.days[key];
+    const e = eatenKcal(d);
+    const mode = energyMode(e, d.move);
+    const isToday = key === todayKey();
+    const cls = modeCalClass(mode.label);
+    host.innerHTML =
+      '<div class="card' + (cls ? (" mode-" + (cls === "burn" ? "burn" : cls === "bulk" ? "bulk" : cls === "fat" ? "fat" : cls === "ok" ? "ok" : "wait")) : "") + '">' +
+      '<div class="row"><b>' + key + (isToday ? " · today" : "") + "</b>" +
+      '<span class="badge">' + (mode.label || "—") + "</span></div>" +
+      '<div class="statgrid" style="margin-top:10px">' +
+      '<div class="stat"><p class="tiny">Eaten</p><p class="big">' + e + "</p></div>" +
+      '<div class="stat"><p class="tiny">Move</p><p class="big">' + (d.move || "—") + "</p></div>" +
+      '<div class="stat"><p class="tiny">Protein</p><p class="big">' + eatenProtein(d) + "g</p></div>" +
+      "</div>" +
+      (d.workoutAdj ? '<p class="tiny" style="margin-top:8px">Lifting adj +' + d.workoutAdj + "</p>" : "") +
+      "<p class='tiny' style='margin-top:8px'>" + (d.meals || []).length + " meal(s) · " + BUDGET + " kcal budget</p>" +
+      "</div>";
+  }
+
+  function renderHistory() {
+    ensureCalCursor();
+    const y = calYear;
+    const m0 = calMonth;
+    const title = document.getElementById("calTitle");
+    if (title) title.textContent = monthTitle(y, m0);
+
+    const firstDow = new Date(y, m0, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(y, m0 + 1, 0).getDate();
+    const today = todayKey();
+    const counts = { Burning: 0, Maintain: 0, Bulking: 0, Fattening: 0 };
+
+    const dows = ["S", "M", "T", "W", "T", "F", "S"];
+    let cells = dows.map(function (d) {
+      return '<div class="cal-dow">' + d + "</div>";
     }).join("");
+
+    for (let i = 0; i < firstDow; i++) {
+      cells += '<div class="cal-day mute" aria-hidden="true"></div>';
+    }
+
+    for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+      const key = ymdKey(y, m0, dayNum);
+      const d = db.days[key];
+      const label = dayTrendMode(d);
+      if (label) counts[label] = (counts[label] || 0) + 1;
+      const cls = modeCalClass(label);
+      const isToday = key === today;
+      const isFuture = key > today;
+      const classes = ["cal-day"];
+      if (label) classes.push("on", cls);
+      else if (!isFuture && d) classes.push("on");
+      if (isFuture) classes.push("mute");
+      if (isToday) classes.push("today");
+      if (histFocusKey === key) classes.push("sel");
+      cells +=
+        '<button type="button" class="' + classes.join(" ") + '" data-day="' + key + '"' +
+        (isFuture && !d ? " disabled" : "") +
+        ' aria-label="' + key + (label ? (" · " + label) : "") + '">' +
+        "<span>" + dayNum + "</span>" +
+        '<span class="dot"></span>' +
+        "</button>";
+    }
+
+    const grid = document.getElementById("calGrid");
+    if (grid) grid.innerHTML = cells;
+
+    const burnt = counts.Burning || 0;
+    const notBurnt = (counts.Maintain || 0) + (counts.Bulking || 0) + (counts.Fattening || 0);
+    const stats = document.getElementById("calStats");
+    if (stats) {
+      stats.innerHTML =
+        '<div class="cal-stat burn"><p class="tiny">Burning days</p><p class="big">' + burnt + "</p></div>" +
+        '<div class="cal-stat not"><p class="tiny">Not burning</p><p class="big">' + notBurnt + "</p></div>";
+    }
+    const br = document.getElementById("calBreakdown");
+    if (br) {
+      br.innerHTML =
+        '<span class="chip">Maintain ' + (counts.Maintain || 0) + "</span>" +
+        '<span class="chip">Bulking ' + (counts.Bulking || 0) + "</span>" +
+        '<span class="chip">Fattening ' + (counts.Fattening || 0) + "</span>" +
+        '<span class="chip">Logged ' + (burnt + notBurnt) + "</span>";
+    }
+
+    if (!histFocusKey || histFocusKey.slice(0, 7) !== (y + "-" + pad2(m0 + 1))) {
+      histFocusKey = db.days[today] && today.slice(0, 7) === (y + "-" + pad2(m0 + 1)) ? today : null;
+    }
+    renderHistoryDetail(histFocusKey);
   }
 
   function escapeHtml(s) {
@@ -2571,6 +2740,38 @@ textarea{resize:vertical;min-height:56px}
     if (!t) return;
     showTab(t);
   };
+
+  (function wireHistoryCalendar() {
+    const prev = document.getElementById("calPrev");
+    const next = document.getElementById("calNext");
+    const grid = document.getElementById("calGrid");
+    if (prev) {
+      prev.onclick = function () {
+        ensureCalCursor();
+        calMonth -= 1;
+        if (calMonth < 0) { calMonth = 11; calYear -= 1; }
+        histFocusKey = null;
+        renderHistory();
+      };
+    }
+    if (next) {
+      next.onclick = function () {
+        ensureCalCursor();
+        calMonth += 1;
+        if (calMonth > 11) { calMonth = 0; calYear += 1; }
+        histFocusKey = null;
+        renderHistory();
+      };
+    }
+    if (grid) {
+      grid.onclick = function (e) {
+        const btn = e.target.closest("[data-day]");
+        if (!btn || btn.disabled) return;
+        histFocusKey = btn.getAttribute("data-day");
+        renderHistory();
+      };
+    }
+  })();
 
   document.getElementById("sheet").addEventListener("click", function (e) {
     if (e.target.id === "sheet") closeSheet();
