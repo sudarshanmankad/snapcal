@@ -135,11 +135,33 @@ textarea{resize:vertical;min-height:72px}
     </div>
   </div>
 
-  <div class="card" id="macroCard">
-    <p class="eyebrow" style="margin:0 0 8px">Protein &amp; energy mode</p>
-    <p class="big" id="proteinLine" style="font-size:18px;margin:0">Protein 0g</p>
-    <p class="tiny" id="proteinGoals" style="margin-top:6px">Set height &amp; weight in Setup for goals (0.8 &amp; 1.6 g/kg).</p>
-    <p class="tiny" id="netLine" style="margin-top:8px">Net — · Set Move to see Deficit / Maintain / Surplus</p>
+  <div class="card" id="proteinCard">
+    <div class="row">
+      <div>
+        <p class="muted">Protein remaining</p>
+        <p class="big" id="proteinLeft">140 g</p>
+      </div>
+      <div style="text-align:right">
+        <p class="muted">Eaten</p>
+        <p class="big" id="proteinEaten" style="font-size:22px">0</p>
+      </div>
+    </div>
+    <div class="bar"><i id="proteinBarFill"></i></div>
+    <p class="tiny" style="margin-top:8px" id="proteinGoals">Daily protein max 140g. Setup height &amp; weight still shows RDA / Active tips.</p>
+  </div>
+
+  <div class="card" id="modeCard">
+    <div class="row">
+      <div>
+        <p class="muted">Energy mode</p>
+        <p class="big" id="modeLabel" style="font-size:24px">Set Move</p>
+      </div>
+      <div style="text-align:right">
+        <p class="muted">Net</p>
+        <p class="big" id="modeNet" style="font-size:22px">—</p>
+      </div>
+    </div>
+    <p class="tiny" style="margin-top:8px" id="modeDetail">Burning = Move &gt; food. Bulking = eating more + burning more. Fattening = eating more than you burned.</p>
   </div>
 
   <div class="card">
@@ -210,8 +232,8 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny">Intake target. Workouts do not auto-increase this.</p>
   </div>
   <div class="card">
-    <p class="eyebrow">Smart chat (optional)</p>
-    <p class="muted">Paste a free <b>Gemini API key</b> and chat becomes LLM-first: your sentence → estimated foods with kcal + protein/carbs/fat. No fixed catalog. Key stays on this phone only, never in GitHub. Quick chips still use the built-in list as a shortcut.</p>
+    <p class="eyebrow">Smart chat (Gemini)</p>
+    <p class="muted">Paste a free <b>Gemini API key</b> — then everything you type in chat is sent to Gemini for kcal <b>and protein</b> (plus carbs/fat). No fixed food list. Key stays on this phone only, never in GitHub. Quick chips still use the built-in list as a shortcut.</p>
     <label class="tiny" style="display:block;margin-top:10px">Gemini API key</label>
     <div class="row" style="gap:8px;align-items:center">
       <input type="password" id="geminiKey" autocomplete="off" placeholder="AIza…" style="flex:1;margin:0" />
@@ -223,7 +245,7 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny" style="margin-top:4px">Use <code>gemini-2.5-flash</code> (free). Old <code>gemini-2.0-flash</code> is shut down.</p>
     <label class="row" style="margin-top:10px;gap:10px">
       <input type="checkbox" id="useLlm" checked style="width:auto" />
-      <span class="tiny" style="color:var(--ink)">Use Gemini for chat (LLM-first meal estimates)</span>
+      <span class="tiny" style="color:var(--ink)">Use Gemini for chat (required for protein on free-form meals)</span>
     </label>
     <button class="btn primary" id="saveAiBtn" type="button">Save AI settings</button>
     <button class="btn light" id="testAiBtn" type="button">Test Gemini</button>
@@ -303,6 +325,7 @@ textarea{resize:vertical;min-height:72px}
 <script>
 (function () {
   const BUDGET = 1800;
+  const PROTEIN_GOAL = 140;
   // --- On-device storage (PERMANENT keys — do not rename; app updates must not wipe user data) ---
   const SCHEMA = 2;
   const KEY = "snapcal-v1";                 // meals + history by day
@@ -329,7 +352,7 @@ textarea{resize:vertical;min-height:72px}
     { id: "samosa", name: "Samosa", kcal: 250, perG: null, protein: 5, proteinPerG: null, unit: "piece", aliases: [] },
     { id: "peanut", name: "Peanuts", kcal: 160, perG: 5.7, protein: 7, proteinPerG: 0.26, unit: "handful", aliases: ["peanut"] },
     { id: "oats", name: "Oats", kcal: 380, perG: 3.8, protein: 13, proteinPerG: 0.13, unit: "serving", aliases: ["oatmeal", "rolled oats", "oat"] },
-    { id: "whey", name: "Whey protein", kcal: 120, perG: 4.0, protein: 24, proteinPerG: 0.8, unit: "scoop", aliases: ["protein whey", "whey protein", "protein powder", "whey powder", "protein"] },
+    { id: "whey", name: "Whey protein", kcal: 120, perG: 4.0, protein: 24, proteinPerG: 0.8, unit: "scoop", aliases: ["protein whey", "whey protein", "protein powder", "whey powder"] },
     { id: "chia", name: "Chia seeds", kcal: 50, perG: 4.86, protein: 2, proteinPerG: 0.17, unit: "serving", aliases: ["chia seed", "chia", "chia seeds"] },
     { id: "almonds", name: "Almonds", kcal: 160, perG: 5.8, protein: 6, proteinPerG: 0.21, unit: "handful", aliases: ["almond"] },
     { id: "milk", name: "Milk", kcal: 150, perG: 0.64, protein: 8, proteinPerG: 0.034, unit: "cup", aliases: ["whole milk"] },
@@ -487,8 +510,8 @@ textarea{resize:vertical;min-height:72px}
     const hint = document.getElementById("chatHint");
     if (hint) {
       hint.textContent = s.geminiKey && s.useLlm
-        ? "Gemini chat on: your sentence → kcal + macros (not a fixed food list). Always confirm before save."
-        : "Add a Gemini key in Setup for free-form chat. Without it, only the built-in list works. Always confirm before save.";
+        ? "Gemini on: type any meal — protein + kcal come from Gemini. Always confirm before save."
+        : "Add a Gemini key in Setup — that’s how chat gets protein for anything you type. Without it, only the built-in list works.";
     }
     const status = document.getElementById("dataStatus");
     if (status) {
@@ -791,6 +814,63 @@ textarea{resize:vertical;min-height:72px}
     return { kcal: null, cleaned: s.trim() };
   }
 
+  // "30g protein whey" / "whey with 30g protein" → protein macros you stated
+  // (not the same as "30g whey protein" = 30g powder weight).
+  function stripSaidProtein(text) {
+    const s = String(text || "");
+    const patterns = [
+      /\bwhich\s+is\s+(\d+(?:\.\d+)?)\s*g(?:rams?)?\s+(?:of\s+)?protein\b/i,
+      /\bwith\s+(\d+(?:\.\d+)?)\s*g(?:rams?)?\s+(?:of\s+)?protein\b/i,
+      /\bprotein\s*[:=]\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\b/i,
+      // "30g protein …" but not "30g protein powder/bar/shake"
+      /\b(\d+(?:\.\d+)?)\s*g(?:rams?)?\s+(?:of\s+)?protein\b(?!\s*(?:powder|bar|bars|shake|isolate|concentrate|casein)\b)/i
+    ];
+    for (let i = 0; i < patterns.length; i++) {
+      const m = s.match(patterns[i]);
+      if (m) {
+        return {
+          protein: Math.round(+m[1]),
+          cleaned: s.replace(patterns[i], " ").replace(/\s+/g, " ").trim()
+        };
+      }
+    }
+    return { protein: null, cleaned: s.trim() };
+  }
+
+  // When Gemini (or any list) misses your typed protein macros, copy them from the sentence.
+  function applySaidProteinFromRaw(raw, items) {
+    if (!items || !items.length) return items || [];
+    const chunks = String(raw || "").split(/\s*,\s*/);
+    chunks.forEach(function (chunk) {
+      const saidKcal = stripSaidKcal(chunk);
+      const saidProt = stripSaidProtein(saidKcal.cleaned || chunk);
+      if (saidProt.protein == null) return;
+      const work = (saidProt.cleaned || "").trim();
+      const f = findFood(work) || findFood(chunk);
+      if (!f) return;
+      var hit = null;
+      items.forEach(function (it) {
+        if (hit) return;
+        const n = normName(it.name || "");
+        const d = normName(it.detail || "");
+        const fn = normName(f.name);
+        if (n === fn || n.indexOf(fn) !== -1 || d.indexOf(fn) !== -1 || (f.id === "whey" && /\bwhey\b/.test(n + " " + d))) {
+          hit = it;
+        }
+      });
+      if (!hit) return;
+      hit.protein = Math.round(+saidProt.protein);
+      hit.grade = "said";
+      if (saidKcal.kcal != null) hit.kcal = saidKcal.kcal;
+      if (!/\byou said\b/i.test(hit.detail || "")) {
+        hit.detail = (hit.detail || hit.name || "Food") + " · you said P " + hit.protein + "g" +
+          (saidKcal.kcal != null ? (", " + saidKcal.kcal + " kcal") : "");
+      }
+      hit.warn = "Using the protein number you typed.";
+    });
+    return items;
+  }
+
   function findFood(raw) {
     let t = normName(raw);
     t = t.replace(/^(of|a|an|the)\s+/, "");
@@ -838,29 +918,87 @@ textarea{resize:vertical;min-height:72px}
     return best;
   }
 
+  // Stable Gemini parses: same sentence → same macros (temp 0 + short cache).
+  var geminiParseCache = {};
+  function mealCacheKey(text) {
+    return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+  }
+  function simpleSeed(text) {
+    var h = 2166136261;
+    var s = mealCacheKey(text);
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0) % 2147483647;
+  }
+
   function parseWithGemini(text) {
     const s = loadSettings();
     if (!s.geminiKey || !s.useLlm) return Promise.resolve(null);
+    const cacheKey = mealCacheKey(text);
+    if (cacheKey && geminiParseCache[cacheKey]) {
+      return Promise.resolve(geminiParseCache[cacheKey].map(function (it) {
+        var out = {};
+        for (var k in it) if (Object.prototype.hasOwnProperty.call(it, k)) out[k] = it[k];
+        return out;
+      }));
+    }
     const model = encodeURIComponent(migrateGeminiModel(s.model || "gemini-2.5-flash"));
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
     const prompt =
-      "You are a nutrition estimator. Read the user's free-form meal sentence and invent NO catalog — estimate every food yourself.\n" +
+      "You are a nutrition estimator. Be DETERMINISTIC and CONSISTENT: the same meal sentence must produce the same foods and macros every time.\n" +
+      "The user typed a free-form meal. Estimate every food yourself — do NOT use a fixed catalog.\n" +
       "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
-      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g' (split grams or one mixed line); trailing/leading grams count; USDA-like densities; if user says which/that is N cal, use that kcal and grade said; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
+      "CRITICAL: every object MUST include a numeric protein in grams (use 0 only if the food truly has none). Protein is as important as kcal.\n" +
+      "Use stable round numbers (whole kcal; protein/carbs/fat to 0 or 1 decimal). Prefer common USDA-like defaults when unsure rather than inventing a new number each time.\n" +
+      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (typical whey ~80% protein); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
       "Meal: " + text;
     return fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, responseMimeType: "application/json" }
+        generationConfig: {
+          temperature: 0,
+          topP: 0.1,
+          topK: 1,
+          seed: simpleSeed(text),
+          responseMimeType: "application/json"
+        }
       })
     }).then(function (res) {
       return res.json().then(function (data) {
         if (!res.ok) {
           const msg = (data && data.error && data.error.message) || ("Gemini HTTP " + res.status);
+          // Some models reject seed — retry once without it
+          if (/seed/i.test(msg)) {
+            return fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature: 0,
+                  topP: 0.1,
+                  topK: 1,
+                  responseMimeType: "application/json"
+                }
+              })
+            }).then(function (res2) {
+              return res2.json().then(function (data2) {
+                if (!res2.ok) {
+                  throw new Error((data2 && data2.error && data2.error.message) || ("Gemini HTTP " + res2.status));
+                }
+                return data2;
+              });
+            });
+          }
           throw new Error(msg);
         }
+        return data;
+      });
+    }).then(function (data) {
         const rawText = (((data.candidates || [])[0] || {}).content || {}).parts
           ? data.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("")
           : "";
@@ -873,25 +1011,29 @@ textarea{resize:vertical;min-height:72px}
           parsed = JSON.parse(m[0]);
         }
         if (!Array.isArray(parsed)) throw new Error("Gemini JSON was not an array");
-        return parsed.map(function (row) {
+        var items = parsed.map(function (row) {
           function numOrNull(v) {
             if (v == null || v === "") return null;
             const n = +v;
             return isNaN(n) ? null : Math.max(0, Math.round(n * 10) / 10);
           }
+          var prot = numOrNull(row.protein);
           return {
             name: String(row.name || "Food").trim(),
             detail: String(row.detail || row.name || "Food").trim(),
             kcal: Math.max(0, Math.round(+row.kcal || 0)),
             grams: numOrNull(row.grams),
-            protein: numOrNull(row.protein),
+            protein: prot,
             carbs: numOrNull(row.carbs),
             fat: numOrNull(row.fat),
             grade: row.grade === "said" || row.grade === "grams" ? row.grade : "llm",
-            warn: row.warn || "LLM estimate — confirm before trusting."
+            warn: row.warn || (prot == null
+              ? "Gemini omitted protein — re-parse or edit."
+              : "Gemini estimate — confirm before trusting.")
           };
         }).filter(function (i) { return i.kcal > 0; });
-      });
+        if (cacheKey && items.length) geminiParseCache[cacheKey] = items;
+        return items;
     });
   }
 
@@ -903,7 +1045,7 @@ textarea{resize:vertical;min-height:72px}
       try {
         const llmItems = await parseWithGemini(raw);
         if (llmItems && llmItems.length) {
-          return { items: llmItems, unknown: [], sourceNote: "gemini" };
+          return { items: applySaidProteinFromRaw(raw, llmItems), unknown: [], sourceNote: "gemini" };
         }
         const localEmpty = parseChat(raw);
         return {
@@ -969,21 +1111,30 @@ textarea{resize:vertical;min-height:72px}
     const unknown = [];
 
     function pushGrams(f, name, q, chunk, said) {
-      if (!f && said.kcal == null) { unknown.push(chunk); return; }
+      if (!f && said.kcal == null && said.protein == null) { unknown.push(chunk); return; }
       function protFrom(food, grams) {
+        if (said && said.protein != null && !isNaN(+said.protein)) return Math.round(+said.protein);
         if (!food) return null;
         if (grams != null && food.proteinPerG != null) return Math.round(food.proteinPerG * grams);
         if (food.protein != null) return food.protein;
         return null;
       }
+      function saidBits() {
+        var bits = [];
+        if (said && said.protein != null) bits.push("P " + Math.round(+said.protein) + "g");
+        if (said && said.kcal != null) bits.push(said.kcal + " kcal");
+        return bits.length ? (" · you said " + bits.join(", ")) : "";
+      }
       if (said.kcal != null) {
         items.push({
           name: f ? f.name : name,
-          detail: q + " g " + (f ? f.name : name) + " · you said " + said.kcal,
+          detail: q + " g " + (f ? f.name : name) + saidBits(),
           kcal: said.kcal,
           protein: protFrom(f, q),
           grade: "said",
-          warn: "Using the calorie number you typed."
+          warn: said.protein != null
+            ? "Using the protein and calorie numbers you typed."
+            : "Using the calorie number you typed."
         });
         return;
       }
@@ -991,22 +1142,25 @@ textarea{resize:vertical;min-height:72px}
         const qShow2 = Math.round(q * 10) / 10;
         items.push({
           name: f.name,
-          detail: qShow2 + " g " + f.name + " (est.)",
+          detail: qShow2 + " g " + f.name + " (est.)" + saidBits(),
           kcal: Math.round(f.kcal * (q / 100)),
           protein: protFrom(f, q),
-          grade: "est",
-          warn: "No per-gram density — rough estimate from serving."
+          grade: said.protein != null ? "said" : "est",
+          warn: said.protein != null
+            ? "Using the protein number you typed."
+            : "No per-gram density — rough estimate from serving."
         });
         return;
       }
       const qShow = Math.round(q * 10) / 10;
       items.push({
         name: f.name,
-        detail: qShow + " g " + f.name,
+        detail: qShow + " g " + f.name + saidBits(),
         kcal: Math.round(f.perG * q),
         protein: protFrom(f, q),
-        grade: "grams",
+        grade: said.protein != null ? "said" : "grams",
         warn: (function () {
+          if (said.protein != null) return "Using the protein number you typed.";
           if (f.id === "rice" && !/\b(cooked|raw|uncooked)\b/i.test(chunk))
             return "Defaulting to cooked rice density. Say raw/uncooked if weighed dry.";
           if (f.id === "chickpeas" && !/\b(cooked|raw|uncooked|dry|dried)\b/i.test(chunk))
@@ -1017,8 +1171,10 @@ textarea{resize:vertical;min-height:72px}
     }
 
     parts.forEach(function (chunk) {
-      const said = stripSaidKcal(chunk);
-      const work = (said.cleaned || chunk).trim();
+      const saidKcal = stripSaidKcal(chunk);
+      const saidProt = stripSaidProtein(saidKcal.cleaned || chunk);
+      const said = { kcal: saidKcal.kcal, protein: saidProt.protein };
+      const work = (saidProt.cleaned || chunk).trim();
 
       // Pull grams from anywhere: "uncooked 50g chickpeas", "beans 250 g uncooked"
       function splitGrams(text) {
@@ -1074,42 +1230,62 @@ textarea{resize:vertical;min-height:72px}
         return;
       }
 
+      function saidDetailSuffix() {
+        var bits = [];
+        if (said.protein != null) bits.push("P " + Math.round(+said.protein) + "g");
+        if (said.kcal != null) bits.push(said.kcal + " kcal");
+        return bits.length ? (" · you said " + bits.join(", ")) : "";
+      }
+      function proteinFromSaid(fallback) {
+        if (said.protein != null) return Math.round(+said.protein);
+        return fallback != null ? fallback : null;
+      }
+
       m = work.match(/^(\d+(?:\.\d+)?)\s*(x|×)?\s*(.+)$/i);
       if (m) {
         const f = findFood(m[3]);
         const q = +m[1];
-        if (!f && said.kcal == null) { unknown.push(chunk); return; }
-        if (said.kcal != null) {
+        if (!f && said.kcal == null && said.protein == null) { unknown.push(chunk); return; }
+        if (said.kcal != null || said.protein != null) {
           items.push({
             name: f ? f.name : m[3].trim(),
-            detail: q + " × " + (f ? f.name : m[3].trim()) + " · you said " + said.kcal,
-            kcal: said.kcal,
+            detail: q + " × " + (f ? f.name : m[3].trim()) + saidDetailSuffix(),
+            kcal: said.kcal != null ? said.kcal : (f ? Math.round(f.kcal * q) : 0),
+            protein: proteinFromSaid(f && f.protein != null ? Math.round(f.protein * q) : null),
             grade: "said",
-            warn: "Using the calorie number you typed."
+            warn: said.protein != null
+              ? "Using the protein" + (said.kcal != null ? " and calorie" : "") + " number you typed."
+              : "Using the calorie number you typed."
           });
           return;
         }
+        if (!f) { unknown.push(chunk); return; }
         items.push({
           name: f.name,
           detail: q + " × " + f.name,
           kcal: Math.round(f.kcal * q),
+          protein: f.protein != null ? Math.round(f.protein * q) : null,
           grade: "count",
           warn: f.warn || ""
         });
         return;
       }
       const f = findFood(work);
-      if (!f && said.kcal == null) { unknown.push(chunk); return; }
-      if (said.kcal != null) {
+      if (!f && said.kcal == null && said.protein == null) { unknown.push(chunk); return; }
+      if (said.kcal != null || said.protein != null) {
         items.push({
           name: f ? f.name : work,
-          detail: (f ? f.name : work) + " · you said " + said.kcal,
-          kcal: said.kcal,
+          detail: (f ? f.name : work) + saidDetailSuffix(),
+          kcal: said.kcal != null ? said.kcal : (f ? f.kcal : 0),
+          protein: proteinFromSaid(f && f.protein != null ? f.protein : null),
           grade: "said",
-          warn: "Using the calorie number you typed."
+          warn: said.protein != null
+            ? "Using the protein" + (said.kcal != null ? " and calorie" : "") + " number you typed."
+            : "Using the calorie number you typed."
         });
         return;
       }
+      if (!f) { unknown.push(chunk); return; }
       items.push({
         name: f.name,
         detail: "1 × " + f.name,
@@ -1162,8 +1338,6 @@ textarea{resize:vertical;min-height:72px}
     }, 0));
   }
 
-
-
   function bodyMetrics() {
     const s = loadSettings();
     const h = s.heightCm != null ? +s.heightCm : NaN;
@@ -1179,14 +1353,45 @@ textarea{resize:vertical;min-height:72px}
 
   function energyMode(intake, move) {
     if (move == null || !(+move > 0)) {
-      return { net: null, label: "Set Move", detail: "Net needs Fitness Move" };
+      return { net: null, label: "Set Move", detail: "Need Fitness Move to judge Burning / Bulking / Fattening" };
     }
-    const net = Math.round(+intake - +move);
-    var label = "Maintain";
-    if (net <= -200) label = "Deficit";
-    else if (net >= 200) label = "Surplus";
+    const food = Math.round(+intake);
+    const burn = Math.round(+move);
+    const net = food - burn; // + = eating more than burned
     const sign = net > 0 ? ("+" + net) : String(net);
-    return { net: net, label: label, detail: "Net " + sign + " kcal (food − Move) · " + label };
+
+    // Burning: burned more than you ate (deficit)
+    if (net <= -200) {
+      return {
+        net: net,
+        label: "Burning",
+        detail: "Move " + burn + " > food " + food + " · net " + sign + " kcal · based on Move, not full TDEE"
+      };
+    }
+    // Near balance
+    if (net < 200) {
+      return {
+        net: net,
+        label: "Maintain",
+        detail: "Food ≈ Move · net " + sign + " kcal · based on Move, not full TDEE"
+      };
+    }
+    // Surplus: eating more than burned
+    // Bulking = also burning a lot (active surplus). Fattening = little burn vs food.
+    const highBurn = burn >= 400;
+    const highEat = food >= BUDGET;
+    if (highBurn && highEat) {
+      return {
+        net: net,
+        label: "Bulking",
+        detail: "Eating more + burning more · net " + sign + " kcal · based on Move, not full TDEE"
+      };
+    }
+    return {
+      net: net,
+      label: "Fattening",
+      detail: "Eating more than you burned · net " + sign + " kcal · based on Move, not full TDEE"
+    };
   }
 
   function mealTotal(m) {
@@ -1394,23 +1599,32 @@ textarea{resize:vertical;min-height:72px}
     document.getElementById("budgetCard").classList.toggle("over", e > BUDGET);
     document.getElementById("move").textContent = d.move ? d.move + " kcal" : "Not set";
     const prot = eatenProtein(d);
-    const body = bodyMetrics();
-    const pLine = document.getElementById("proteinLine");
+    const pLeft = PROTEIN_GOAL - prot;
+    const pLeftEl = document.getElementById("proteinLeft");
+    const pEatenEl = document.getElementById("proteinEaten");
+    const pBar = document.getElementById("proteinBarFill");
+    const pCard = document.getElementById("proteinCard");
     const pGoals = document.getElementById("proteinGoals");
-    const nLine = document.getElementById("netLine");
-    if (pLine) pLine.textContent = "Protein " + prot + "g";
+    if (pLeftEl) pLeftEl.textContent = pLeft.toLocaleString() + " g";
+    if (pEatenEl) pEatenEl.textContent = String(prot);
+    if (pBar) pBar.style.width = Math.min(100, Math.round((prot / PROTEIN_GOAL) * 100)) + "%";
+    if (pCard) pCard.classList.toggle("over", prot > PROTEIN_GOAL);
+    const body = bodyMetrics();
     if (pGoals) {
       if (body.rda != null && body.active != null) {
-        pGoals.textContent = "Goals · RDA " + body.rda + "g (0.8×kg) · Active " + body.active + "g (1.6×kg)" +
+        pGoals.textContent = "Max " + PROTEIN_GOAL + "g today · RDA " + body.rda + "g (0.8×kg) · Active " + body.active + "g (1.6×kg)" +
           (body.bmi != null ? " · BMI " + body.bmi : "");
       } else {
-        pGoals.textContent = "Set height & weight in Setup for goals (0.8 & 1.6 g/kg).";
+        pGoals.textContent = "Daily protein max " + PROTEIN_GOAL + "g. Set height & weight in Setup for RDA / Active tips.";
       }
     }
-    if (nLine) {
-      const mode = energyMode(e, d.move);
-      nLine.textContent = mode.detail + " · based on Move, not full TDEE";
-    }
+    const mode = energyMode(e, d.move);
+    const modeLabel = document.getElementById("modeLabel");
+    const modeNet = document.getElementById("modeNet");
+    const modeDetail = document.getElementById("modeDetail");
+    if (modeLabel) modeLabel.textContent = mode.label;
+    if (modeNet) modeNet.textContent = mode.net == null ? "—" : ((mode.net > 0 ? "+" : "") + mode.net);
+    if (modeDetail) modeDetail.textContent = mode.detail;
     document.getElementById("count").textContent = (d.meals || []).length;
     const list = document.getElementById("meals");
     if (!d.meals.length) {
@@ -1482,14 +1696,22 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function confirmMeal(opts) {
-    const items = (opts.items || []).map(withEstimatedProtein);
+    // Gemini meals: trust model protein. Local/chips: fill from catalog if missing.
+    const fromGemini = opts.source === "chat-ai";
+    const items = (opts.items || []).map(function (item) {
+      return fromGemini ? item : withEstimatedProtein(item);
+    });
     const unknown = opts.unknown || [];
     const source = opts.source || "chat";
     const photo = opts.photo || null;
     const tot = items.reduce(function (s, i) { return s + i.kcal; }, 0);
     const protTot = Math.round(items.reduce(function (s, i) { return s + estimateItemProtein(i); }, 0));
+    const missingP = fromGemini && items.some(function (i) { return i.protein == null || isNaN(+i.protein); });
     let body =
       "<p class='eyebrow'>Confirm</p><h2 style='margin:4px 0 8px'>Save meal? " + tot + " kcal" + (protTot ? (" · P " + protTot + "g") : "") + "</h2>";
+    if (fromGemini) {
+      body += "<p class='tiny' style='margin:0 0 8px'>Protein from Gemini" + (missingP ? " (some items missing P — re-parse if wrong)" : "") + "</p>";
+    }
     if (photo) body += '<img src="' + photo + '" alt="" style="width:100%;border-radius:14px;margin:6px 0 10px;max-height:160px;object-fit:cover" />';
     items.forEach(function (i) {
       var macroBits = [];
@@ -1532,7 +1754,11 @@ textarea{resize:vertical;min-height:72px}
       saveAll(db);
       learnFromItems(items);
       closeSheet();
-      if (source === "chat") document.getElementById("text").value = "";
+      // Clear chat after any chat save (local or Gemini "chat-ai")
+      if (String(source).indexOf("chat") === 0) {
+        var textEl = document.getElementById("text");
+        if (textEl) textEl.value = "";
+      }
       if (String(source).indexOf("snap") === 0) clearSnap();
       renderToday();
       toast("Saved · " + tot + " kcal" + (protTot ? (" · P " + protTot + "g") : ""));
@@ -1696,6 +1922,8 @@ textarea{resize:vertical;min-height:72px}
     if (s.geminiKey && s.useLlm) {
       btn.disabled = true;
       btn.textContent = "Asking Gemini…";
+    } else {
+      toast("Tip: add a Gemini key in Setup so protein comes from AI for anything you type");
     }
     try {
       const parsed = await parseChatSmart(raw);
@@ -1703,10 +1931,15 @@ textarea{resize:vertical;min-height:72px}
       if (parsed.unknown && parsed.unknown.length && (!parsed.items || !parsed.items.length)) {
         toast("Couldn’t parse that. Add a Gemini key in Setup for free-form meals.");
       }
+      const fromGemini = parsed.sourceNote && parsed.sourceNote.indexOf("gemini") >= 0;
+      if (fromGemini) {
+        const miss = (parsed.items || []).filter(function (i) { return i.protein == null || isNaN(+i.protein); });
+        if (miss.length) toast("Gemini missed protein on " + miss.length + " item(s) — check confirm sheet");
+      }
       confirmMeal({
         items: parsed.items,
         unknown: parsed.unknown,
-        source: parsed.sourceNote && parsed.sourceNote.indexOf("gemini") >= 0 ? "chat-ai" : "chat"
+        source: fromGemini ? "chat-ai" : "chat"
       });
     } finally {
       btn.disabled = false;
@@ -1715,11 +1948,15 @@ textarea{resize:vertical;min-height:72px}
   };
 
   document.getElementById("saveAiBtn").onclick = function () {
-    saveSettings({
-      geminiKey: document.getElementById("geminiKey").value.trim(),
+    // Blank password field must not wipe a stored key (iOS often shows the box empty).
+    // Only "Remove key" clears it on purpose.
+    var typed = document.getElementById("geminiKey").value.trim();
+    var patch = {
       model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
       useLlm: document.getElementById("useLlm").checked
-    });
+    };
+    if (typed) patch.geminiKey = typed;
+    saveSettings(patch);
     renderSetupAi();
     toast(loadSettings().geminiKey ? "AI settings saved on this phone" : "Saved (no key)");
   };
@@ -1739,12 +1976,14 @@ textarea{resize:vertical;min-height:72px}
   };
 
   document.getElementById("testAiBtn").onclick = async function () {
-    // Save current form first so Test uses what you typed
-    saveSettings({
-      geminiKey: document.getElementById("geminiKey").value.trim(),
+    // Save form first; blank key field keeps whatever is already stored.
+    var typed = document.getElementById("geminiKey").value.trim();
+    var patch = {
       model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
       useLlm: document.getElementById("useLlm").checked
-    });
+    };
+    if (typed) patch.geminiKey = typed;
+    saveSettings(patch);
     renderSetupAi();
     const s = loadSettings();
     const status = document.getElementById("aiTestStatus");
@@ -2033,6 +2272,7 @@ textarea{resize:vertical;min-height:72px}
         name: f.name,
         detail: "1 × " + f.name,
         kcal: f.kcal,
+        protein: f.protein != null ? f.protein : null,
         grade: "est",
         warn: "Plate photo estimate — not label-grade. Adjust if portions differ."
       };
