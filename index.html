@@ -316,8 +316,8 @@ textarea{resize:vertical;min-height:56px}
     </div>
     <p class="tiny" style="margin-top:6px">Hidden like a password is normal. Tap Show to check it starts with <code>AIza</code>, then Save.</p>
     <label class="tiny" style="display:block;margin-top:8px">Model</label>
-    <input type="text" id="geminiModel" value="gemini-2.5-flash" />
-    <p class="tiny" style="margin-top:4px">Use <code>gemini-2.5-flash</code> (free). Old <code>gemini-2.0-flash</code> is shut down.</p>
+    <input type="text" id="geminiModel" value="gemini-3.5-flash" />
+    <p class="tiny" style="margin-top:4px">Use <code>gemini-3.5-flash</code> (free). Old <code>gemini-2.5-flash</code> / <code>2.5-flash-lite</code> are shut down for new keys.</p>
     <label class="row" style="margin-top:10px;gap:10px">
       <input type="checkbox" id="useLlm" checked style="width:auto" />
       <span class="tiny" style="color:var(--ink)">Use Gemini for chat (required for protein on free-form meals)</span>
@@ -452,9 +452,12 @@ textarea{resize:vertical;min-height:56px}
   ];
 
   function migrateGeminiModel(model) {
-    var m = String(model || "").trim() || "gemini-2.5-flash";
-    // gemini-2.0-flash was shut down (June 2026)
-    if (/^gemini-2\.0-flash/.test(m)) return "gemini-2.5-flash";
+    var m = String(model || "").trim() || "gemini-3.5-flash";
+    // Retired models → current free-tier flash
+    if (/^gemini-2\.0-flash/.test(m)) return "gemini-3.5-flash";
+    if (/^gemini-2\.5-flash-lite/.test(m)) return "gemini-3.5-flash-lite";
+    if (/^gemini-2\.5-flash/.test(m)) return "gemini-3.5-flash";
+    if (m === "gemini-flash-latest") return "gemini-3.5-flash";
     return m;
   }
 
@@ -464,7 +467,7 @@ textarea{resize:vertical;min-height:56px}
       if (s && typeof s === "object") {
         return {
           geminiKey: s.geminiKey || "",
-          model: migrateGeminiModel(s.model || "gemini-2.5-flash"),
+          model: migrateGeminiModel(s.model || "gemini-3.5-flash"),
           useLlm: s.useLlm !== false,
           autoMove: s.moveSleekV1 ? !!s.autoMove : true,
           shortcutName: s.shortcutName || "SnapCal Move",
@@ -483,7 +486,7 @@ textarea{resize:vertical;min-height:56px}
     } catch (e) {}
     return {
       geminiKey: "",
-      model: "gemini-2.5-flash",
+      model: "gemini-3.5-flash",
       useLlm: true,
       autoMove: true,
       shortcutName: "SnapCal Move",
@@ -517,7 +520,7 @@ textarea{resize:vertical;min-height:56px}
     })();
     const next = {
       geminiKey: s.geminiKey != null ? s.geminiKey : (cur.geminiKey || ""),
-      model: s.model != null ? s.model : (cur.model || "gemini-2.5-flash"),
+      model: s.model != null ? s.model : (cur.model || "gemini-3.5-flash"),
       useLlm: s.useLlm != null ? s.useLlm : (cur.useLlm !== false),
       autoMove: s.autoMove != null ? !!s.autoMove : (cur.autoMove != null ? !!cur.autoMove : true),
       shortcutName: s.shortcutName != null ? s.shortcutName : (cur.shortcutName || "SnapCal Move"),
@@ -599,7 +602,7 @@ textarea{resize:vertical;min-height:56px}
     const modelEl = document.getElementById("geminiModel");
     const useEl = document.getElementById("useLlm");
     if (keyEl) keyEl.value = s.geminiKey || "";
-    if (modelEl) modelEl.value = s.model || "gemini-2.5-flash";
+    if (modelEl) modelEl.value = s.model || "gemini-3.5-flash";
     if (useEl) useEl.checked = s.useLlm !== false;
     const n = loadMyFoods().length;
     const countEl = document.getElementById("myFoodsCount");
@@ -619,7 +622,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v41 · Gemini Parse fix — if Parse still says “Couldn’t match”, tap Force refresh app below.";
+    if (ver) ver.textContent = "App build: v42 · Gemini 3.5 models — if Parse still says “Couldn’t match”, tap Force refresh app below.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -859,7 +862,7 @@ textarea{resize:vertical;min-height:56px}
       const cur = loadSettings();
       saveSettings({
         geminiKey: payload.settings.geminiKey || cur.geminiKey || "",
-        model: payload.settings.model || cur.model || "gemini-2.5-flash",
+        model: payload.settings.model || cur.model || "gemini-3.5-flash",
         useLlm: payload.settings.useLlm != null ? payload.settings.useLlm : cur.useLlm
       });
     }
@@ -1080,9 +1083,9 @@ textarea{resize:vertical;min-height:56px}
     // Same model fallback list as Test Gemini — Test can pass on model #2 while
     // Parse used to fail forever on a dead saved model name.
     const modelsTry = [];
-    const preferred = migrateGeminiModel(s.model || "gemini-2.5-flash");
+    const preferred = migrateGeminiModel(s.model || "gemini-3.5-flash");
     modelsTry.push(preferred);
-    ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"].forEach(function (m) {
+    ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"].forEach(function (m) {
       if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
     });
     const prompt =
@@ -1220,7 +1223,7 @@ textarea{resize:vertical;min-height:56px}
     var useEl = document.getElementById("useLlm");
     var typed = keyEl ? keyEl.value.trim() : "";
     var patch = {
-      model: modelEl && modelEl.value.trim() ? modelEl.value.trim() : "gemini-2.5-flash",
+      model: modelEl && modelEl.value.trim() ? modelEl.value.trim() : "gemini-3.5-flash",
       useLlm: useEl ? !!useEl.checked : true
     };
     if (typed) patch.geminiKey = typed;
@@ -1244,9 +1247,9 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = "This key does not look like a Gemini API key (usually starts with AIza).";
     }
     const modelsTry = [];
-    const preferred = migrateGeminiModel(s.model || "gemini-2.5-flash");
+    const preferred = migrateGeminiModel(s.model || "gemini-3.5-flash");
     modelsTry.push(preferred);
-    ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"].forEach(function (m) {
+    ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"].forEach(function (m) {
       if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
     });
     let lastErr = null;
@@ -2427,7 +2430,7 @@ textarea{resize:vertical;min-height:56px}
     // Only "Remove key" clears it on purpose.
     var typed = document.getElementById("geminiKey").value.trim();
     var patch = {
-      model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
+      model: document.getElementById("geminiModel").value.trim() || "gemini-3.5-flash",
       useLlm: document.getElementById("useLlm").checked
     };
     if (typed) patch.geminiKey = typed;
@@ -2466,7 +2469,7 @@ textarea{resize:vertical;min-height:56px}
   };
 
   document.getElementById("clearAiBtn").onclick = function () {
-    saveSettings({ geminiKey: "", model: "gemini-2.5-flash", useLlm: true });
+    saveSettings({ geminiKey: "", model: "gemini-3.5-flash", useLlm: true });
     renderSetupAi();
     const st = document.getElementById("aiTestStatus");
     if (st) st.textContent = "";
