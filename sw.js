@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v24-20260913-protein-backfill";
+const CACHE = "snapcal-v25-20260913-protein-on-entry";
 const ASSETS = [
   "./",
   "./index.html",
