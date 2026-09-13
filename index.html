@@ -791,6 +791,28 @@ textarea{resize:vertical;min-height:72px}
     return { kcal: null, cleaned: s.trim() };
   }
 
+  // "30g protein whey" / "whey with 30g protein" → protein macros you stated
+  // (not the same as "30g whey protein" = 30g powder weight).
+  function stripSaidProtein(text) {
+    const s = String(text || "");
+    const patterns = [
+      /\bwhich\s+is\s+(\d+(?:\.\d+)?)\s*g(?:rams?)?\s+(?:of\s+)?protein\b/i,
+      /\bwith\s+(\d+(?:\.\d+)?)\s*g(?:rams?)?\s+(?:of\s+)?protein\b/i,
+      /\bprotein\s*[:=]?\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\b/i,
+      /\b(\d+(?:\.\d+)?)\s*g(?:rams?)?\s+(?:of\s+)?protein\b/i
+    ];
+    for (let i = 0; i < patterns.length; i++) {
+      const m = s.match(patterns[i]);
+      if (m) {
+        return {
+          protein: Math.round(+m[1]),
+          cleaned: s.replace(patterns[i], " ").replace(/\s+/g, " ").trim()
+        };
+      }
+    }
+    return { protein: null, cleaned: s.trim() };
+  }
+
   function findFood(raw) {
     let t = normName(raw);
     t = t.replace(/^(of|a|an|the)\s+/, "");
@@ -846,7 +868,7 @@ textarea{resize:vertical;min-height:72px}
     const prompt =
       "You are a nutrition estimator. Read the user's free-form meal sentence and invent NO catalog — estimate every food yourself.\n" +
       "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
-      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g' (split grams or one mixed line); trailing/leading grams count; USDA-like densities; if user says which/that is N cal, use that kcal and grade said; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
+      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g' (split grams or one mixed line); trailing/leading grams count; USDA-like densities; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein grams (macros), NOT powder weight — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
       "Meal: " + text;
     return fetch(url, {
       method: "POST",
@@ -969,21 +991,30 @@ textarea{resize:vertical;min-height:72px}
     const unknown = [];
 
     function pushGrams(f, name, q, chunk, said) {
-      if (!f && said.kcal == null) { unknown.push(chunk); return; }
+      if (!f && said.kcal == null && said.protein == null) { unknown.push(chunk); return; }
       function protFrom(food, grams) {
+        if (said && said.protein != null && !isNaN(+said.protein)) return Math.round(+said.protein);
         if (!food) return null;
         if (grams != null && food.proteinPerG != null) return Math.round(food.proteinPerG * grams);
         if (food.protein != null) return food.protein;
         return null;
       }
+      function saidBits() {
+        var bits = [];
+        if (said && said.protein != null) bits.push("P " + Math.round(+said.protein) + "g");
+        if (said && said.kcal != null) bits.push(said.kcal + " kcal");
+        return bits.length ? (" · you said " + bits.join(", ")) : "";
+      }
       if (said.kcal != null) {
         items.push({
           name: f ? f.name : name,
-          detail: q + " g " + (f ? f.name : name) + " · you said " + said.kcal,
+          detail: q + " g " + (f ? f.name : name) + saidBits(),
           kcal: said.kcal,
           protein: protFrom(f, q),
           grade: "said",
-          warn: "Using the calorie number you typed."
+          warn: said.protein != null
+            ? "Using the protein and calorie numbers you typed."
+            : "Using the calorie number you typed."
         });
         return;
       }
@@ -991,22 +1022,25 @@ textarea{resize:vertical;min-height:72px}
         const qShow2 = Math.round(q * 10) / 10;
         items.push({
           name: f.name,
-          detail: qShow2 + " g " + f.name + " (est.)",
+          detail: qShow2 + " g " + f.name + " (est.)" + saidBits(),
           kcal: Math.round(f.kcal * (q / 100)),
           protein: protFrom(f, q),
-          grade: "est",
-          warn: "No per-gram density — rough estimate from serving."
+          grade: said.protein != null ? "said" : "est",
+          warn: said.protein != null
+            ? "Using the protein number you typed."
+            : "No per-gram density — rough estimate from serving."
         });
         return;
       }
       const qShow = Math.round(q * 10) / 10;
       items.push({
         name: f.name,
-        detail: qShow + " g " + f.name,
+        detail: qShow + " g " + f.name + saidBits(),
         kcal: Math.round(f.perG * q),
         protein: protFrom(f, q),
-        grade: "grams",
+        grade: said.protein != null ? "said" : "grams",
         warn: (function () {
+          if (said.protein != null) return "Using the protein number you typed.";
           if (f.id === "rice" && !/\b(cooked|raw|uncooked)\b/i.test(chunk))
             return "Defaulting to cooked rice density. Say raw/uncooked if weighed dry.";
           if (f.id === "chickpeas" && !/\b(cooked|raw|uncooked|dry|dried)\b/i.test(chunk))
@@ -1017,8 +1051,10 @@ textarea{resize:vertical;min-height:72px}
     }
 
     parts.forEach(function (chunk) {
-      const said = stripSaidKcal(chunk);
-      const work = (said.cleaned || chunk).trim();
+      const saidKcal = stripSaidKcal(chunk);
+      const saidProt = stripSaidProtein(saidKcal.cleaned || chunk);
+      const said = { kcal: saidKcal.kcal, protein: saidProt.protein };
+      const work = (saidProt.cleaned || chunk).trim();
 
       // Pull grams from anywhere: "uncooked 50g chickpeas", "beans 250 g uncooked"
       function splitGrams(text) {
@@ -1074,18 +1110,32 @@ textarea{resize:vertical;min-height:72px}
         return;
       }
 
+      function saidDetailSuffix() {
+        var bits = [];
+        if (said.protein != null) bits.push("P " + Math.round(+said.protein) + "g");
+        if (said.kcal != null) bits.push(said.kcal + " kcal");
+        return bits.length ? (" · you said " + bits.join(", ")) : "";
+      }
+      function proteinFromSaid(fallback) {
+        if (said.protein != null) return Math.round(+said.protein);
+        return fallback != null ? fallback : null;
+      }
+
       m = work.match(/^(\d+(?:\.\d+)?)\s*(x|×)?\s*(.+)$/i);
       if (m) {
         const f = findFood(m[3]);
         const q = +m[1];
-        if (!f && said.kcal == null) { unknown.push(chunk); return; }
-        if (said.kcal != null) {
+        if (!f && said.kcal == null && said.protein == null) { unknown.push(chunk); return; }
+        if (said.kcal != null || said.protein != null) {
           items.push({
             name: f ? f.name : m[3].trim(),
-            detail: q + " × " + (f ? f.name : m[3].trim()) + " · you said " + said.kcal,
-            kcal: said.kcal,
+            detail: q + " × " + (f ? f.name : m[3].trim()) + saidDetailSuffix(),
+            kcal: said.kcal != null ? said.kcal : Math.round(f.kcal * q),
+            protein: proteinFromSaid(f && f.protein != null ? Math.round(f.protein * q) : null),
             grade: "said",
-            warn: "Using the calorie number you typed."
+            warn: said.protein != null
+              ? "Using the protein" + (said.kcal != null ? " and calorie" : "") + " number you typed."
+              : "Using the calorie number you typed."
           });
           return;
         }
@@ -1093,20 +1143,24 @@ textarea{resize:vertical;min-height:72px}
           name: f.name,
           detail: q + " × " + f.name,
           kcal: Math.round(f.kcal * q),
+          protein: f.protein != null ? Math.round(f.protein * q) : null,
           grade: "count",
           warn: f.warn || ""
         });
         return;
       }
       const f = findFood(work);
-      if (!f && said.kcal == null) { unknown.push(chunk); return; }
-      if (said.kcal != null) {
+      if (!f && said.kcal == null && said.protein == null) { unknown.push(chunk); return; }
+      if (said.kcal != null || said.protein != null) {
         items.push({
           name: f ? f.name : work,
-          detail: (f ? f.name : work) + " · you said " + said.kcal,
-          kcal: said.kcal,
+          detail: (f ? f.name : work) + saidDetailSuffix(),
+          kcal: said.kcal != null ? said.kcal : (f ? f.kcal : 0),
+          protein: proteinFromSaid(f && f.protein != null ? f.protein : null),
           grade: "said",
-          warn: "Using the calorie number you typed."
+          warn: said.protein != null
+            ? "Using the protein" + (said.kcal != null ? " and calorie" : "") + " number you typed."
+            : "Using the calorie number you typed."
         });
         return;
       }
