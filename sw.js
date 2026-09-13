@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v27-20260913-keep-gemini-key";
+const CACHE = "snapcal-v28-20260913-gemini-protein";
 const ASSETS = [
   "./",
   "./index.html",

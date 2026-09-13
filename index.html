@@ -210,8 +210,8 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny">Intake target. Workouts do not auto-increase this.</p>
   </div>
   <div class="card">
-    <p class="eyebrow">Smart chat (optional)</p>
-    <p class="muted">Paste a free <b>Gemini API key</b> and chat becomes LLM-first: your sentence → estimated foods with kcal + protein/carbs/fat. No fixed catalog. Key stays on this phone only, never in GitHub. Quick chips still use the built-in list as a shortcut.</p>
+    <p class="eyebrow">Smart chat (Gemini)</p>
+    <p class="muted">Paste a free <b>Gemini API key</b> — then everything you type in chat is sent to Gemini for kcal <b>and protein</b> (plus carbs/fat). No fixed food list. Key stays on this phone only, never in GitHub. Quick chips still use the built-in list as a shortcut.</p>
     <label class="tiny" style="display:block;margin-top:10px">Gemini API key</label>
     <div class="row" style="gap:8px;align-items:center">
       <input type="password" id="geminiKey" autocomplete="off" placeholder="AIza…" style="flex:1;margin:0" />
@@ -223,7 +223,7 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny" style="margin-top:4px">Use <code>gemini-2.5-flash</code> (free). Old <code>gemini-2.0-flash</code> is shut down.</p>
     <label class="row" style="margin-top:10px;gap:10px">
       <input type="checkbox" id="useLlm" checked style="width:auto" />
-      <span class="tiny" style="color:var(--ink)">Use Gemini for chat (LLM-first meal estimates)</span>
+      <span class="tiny" style="color:var(--ink)">Use Gemini for chat (required for protein on free-form meals)</span>
     </label>
     <button class="btn primary" id="saveAiBtn" type="button">Save AI settings</button>
     <button class="btn light" id="testAiBtn" type="button">Test Gemini</button>
@@ -329,7 +329,7 @@ textarea{resize:vertical;min-height:72px}
     { id: "samosa", name: "Samosa", kcal: 250, perG: null, protein: 5, proteinPerG: null, unit: "piece", aliases: [] },
     { id: "peanut", name: "Peanuts", kcal: 160, perG: 5.7, protein: 7, proteinPerG: 0.26, unit: "handful", aliases: ["peanut"] },
     { id: "oats", name: "Oats", kcal: 380, perG: 3.8, protein: 13, proteinPerG: 0.13, unit: "serving", aliases: ["oatmeal", "rolled oats", "oat"] },
-    { id: "whey", name: "Whey protein", kcal: 120, perG: 4.0, protein: 24, proteinPerG: 0.8, unit: "scoop", aliases: ["protein whey", "whey protein", "protein powder", "whey powder", "protein"] },
+    { id: "whey", name: "Whey protein", kcal: 120, perG: 4.0, protein: 24, proteinPerG: 0.8, unit: "scoop", aliases: ["protein whey", "whey protein", "protein powder", "whey powder"] },
     { id: "chia", name: "Chia seeds", kcal: 50, perG: 4.86, protein: 2, proteinPerG: 0.17, unit: "serving", aliases: ["chia seed", "chia", "chia seeds"] },
     { id: "almonds", name: "Almonds", kcal: 160, perG: 5.8, protein: 6, proteinPerG: 0.21, unit: "handful", aliases: ["almond"] },
     { id: "milk", name: "Milk", kcal: 150, perG: 0.64, protein: 8, proteinPerG: 0.034, unit: "cup", aliases: ["whole milk"] },
@@ -487,8 +487,8 @@ textarea{resize:vertical;min-height:72px}
     const hint = document.getElementById("chatHint");
     if (hint) {
       hint.textContent = s.geminiKey && s.useLlm
-        ? "Gemini chat on: your sentence → kcal + macros (not a fixed food list). Always confirm before save."
-        : "Add a Gemini key in Setup for free-form chat. Without it, only the built-in list works. Always confirm before save.";
+        ? "Gemini on: type any meal — protein + kcal come from Gemini. Always confirm before save."
+        : "Add a Gemini key in Setup — that’s how chat gets protein for anything you type. Without it, only the built-in list works.";
     }
     const status = document.getElementById("dataStatus");
     if (status) {
@@ -798,8 +798,9 @@ textarea{resize:vertical;min-height:72px}
     const patterns = [
       /\bwhich\s+is\s+(\d+(?:\.\d+)?)\s*g(?:rams?)?\s+(?:of\s+)?protein\b/i,
       /\bwith\s+(\d+(?:\.\d+)?)\s*g(?:rams?)?\s+(?:of\s+)?protein\b/i,
-      /\bprotein\s*[:=]?\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\b/i,
-      /\b(\d+(?:\.\d+)?)\s*g(?:rams?)?\s+(?:of\s+)?protein\b/i
+      /\bprotein\s*[:=]\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\b/i,
+      // "30g protein …" but not "30g protein powder/bar/shake"
+      /\b(\d+(?:\.\d+)?)\s*g(?:rams?)?\s+(?:of\s+)?protein\b(?!\s*(?:powder|bar|bars|shake|isolate|concentrate|casein)\b)/i
     ];
     for (let i = 0; i < patterns.length; i++) {
       const m = s.match(patterns[i]);
@@ -811,6 +812,40 @@ textarea{resize:vertical;min-height:72px}
       }
     }
     return { protein: null, cleaned: s.trim() };
+  }
+
+  // When Gemini (or any list) misses your typed protein macros, copy them from the sentence.
+  function applySaidProteinFromRaw(raw, items) {
+    if (!items || !items.length) return items || [];
+    const chunks = String(raw || "").split(/\s*,\s*/);
+    chunks.forEach(function (chunk) {
+      const saidKcal = stripSaidKcal(chunk);
+      const saidProt = stripSaidProtein(saidKcal.cleaned || chunk);
+      if (saidProt.protein == null) return;
+      const work = (saidProt.cleaned || "").trim();
+      const f = findFood(work) || findFood(chunk);
+      if (!f) return;
+      var hit = null;
+      items.forEach(function (it) {
+        if (hit) return;
+        const n = normName(it.name || "");
+        const d = normName(it.detail || "");
+        const fn = normName(f.name);
+        if (n === fn || n.indexOf(fn) !== -1 || d.indexOf(fn) !== -1 || (f.id === "whey" && /\bwhey\b/.test(n + " " + d))) {
+          hit = it;
+        }
+      });
+      if (!hit) return;
+      hit.protein = Math.round(+saidProt.protein);
+      hit.grade = "said";
+      if (saidKcal.kcal != null) hit.kcal = saidKcal.kcal;
+      if (!/\byou said\b/i.test(hit.detail || "")) {
+        hit.detail = (hit.detail || hit.name || "Food") + " · you said P " + hit.protein + "g" +
+          (saidKcal.kcal != null ? (", " + saidKcal.kcal + " kcal") : "");
+      }
+      hit.warn = "Using the protein number you typed.";
+    });
+    return items;
   }
 
   function findFood(raw) {
@@ -866,9 +901,10 @@ textarea{resize:vertical;min-height:72px}
     const model = encodeURIComponent(migrateGeminiModel(s.model || "gemini-2.5-flash"));
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
     const prompt =
-      "You are a nutrition estimator. Read the user's free-form meal sentence and invent NO catalog — estimate every food yourself.\n" +
+      "You are a nutrition estimator. The user typed a free-form meal. Estimate every food yourself — do NOT use a fixed catalog.\n" +
       "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
-      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g' (split grams or one mixed line); trailing/leading grams count; USDA-like densities; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein grams (macros), NOT powder weight — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
+      "CRITICAL: every object MUST include a numeric protein in grams (use 0 only if the food truly has none). Protein is as important as kcal.\n" +
+      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; USDA-like densities; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (estimate protein from typical whey ~80%); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
       "Meal: " + text;
     return fetch(url, {
       method: "POST",
@@ -901,16 +937,19 @@ textarea{resize:vertical;min-height:72px}
             const n = +v;
             return isNaN(n) ? null : Math.max(0, Math.round(n * 10) / 10);
           }
+          var prot = numOrNull(row.protein);
           return {
             name: String(row.name || "Food").trim(),
             detail: String(row.detail || row.name || "Food").trim(),
             kcal: Math.max(0, Math.round(+row.kcal || 0)),
             grams: numOrNull(row.grams),
-            protein: numOrNull(row.protein),
+            protein: prot,
             carbs: numOrNull(row.carbs),
             fat: numOrNull(row.fat),
             grade: row.grade === "said" || row.grade === "grams" ? row.grade : "llm",
-            warn: row.warn || "LLM estimate — confirm before trusting."
+            warn: row.warn || (prot == null
+              ? "Gemini omitted protein — re-parse or edit."
+              : "Gemini estimate — confirm before trusting.")
           };
         }).filter(function (i) { return i.kcal > 0; });
       });
@@ -925,7 +964,7 @@ textarea{resize:vertical;min-height:72px}
       try {
         const llmItems = await parseWithGemini(raw);
         if (llmItems && llmItems.length) {
-          return { items: llmItems, unknown: [], sourceNote: "gemini" };
+          return { items: applySaidProteinFromRaw(raw, llmItems), unknown: [], sourceNote: "gemini" };
         }
         const localEmpty = parseChat(raw);
         return {
@@ -1130,7 +1169,7 @@ textarea{resize:vertical;min-height:72px}
           items.push({
             name: f ? f.name : m[3].trim(),
             detail: q + " × " + (f ? f.name : m[3].trim()) + saidDetailSuffix(),
-            kcal: said.kcal != null ? said.kcal : Math.round(f.kcal * q),
+            kcal: said.kcal != null ? said.kcal : (f ? Math.round(f.kcal * q) : 0),
             protein: proteinFromSaid(f && f.protein != null ? Math.round(f.protein * q) : null),
             grade: "said",
             warn: said.protein != null
@@ -1139,6 +1178,7 @@ textarea{resize:vertical;min-height:72px}
           });
           return;
         }
+        if (!f) { unknown.push(chunk); return; }
         items.push({
           name: f.name,
           detail: q + " × " + f.name,
@@ -1164,6 +1204,7 @@ textarea{resize:vertical;min-height:72px}
         });
         return;
       }
+      if (!f) { unknown.push(chunk); return; }
       items.push({
         name: f.name,
         detail: "1 × " + f.name,
@@ -1534,14 +1575,22 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function confirmMeal(opts) {
-    const items = (opts.items || []).map(withEstimatedProtein);
+    // Gemini meals: trust model protein. Local/chips: fill from catalog if missing.
+    const fromGemini = opts.source === "chat-ai";
+    const items = (opts.items || []).map(function (item) {
+      return fromGemini ? item : withEstimatedProtein(item);
+    });
     const unknown = opts.unknown || [];
     const source = opts.source || "chat";
     const photo = opts.photo || null;
     const tot = items.reduce(function (s, i) { return s + i.kcal; }, 0);
     const protTot = Math.round(items.reduce(function (s, i) { return s + estimateItemProtein(i); }, 0));
+    const missingP = fromGemini && items.some(function (i) { return i.protein == null || isNaN(+i.protein); });
     let body =
       "<p class='eyebrow'>Confirm</p><h2 style='margin:4px 0 8px'>Save meal? " + tot + " kcal" + (protTot ? (" · P " + protTot + "g") : "") + "</h2>";
+    if (fromGemini) {
+      body += "<p class='tiny' style='margin:0 0 8px'>Protein from Gemini" + (missingP ? " (some items missing P — re-parse if wrong)" : "") + "</p>";
+    }
     if (photo) body += '<img src="' + photo + '" alt="" style="width:100%;border-radius:14px;margin:6px 0 10px;max-height:160px;object-fit:cover" />';
     items.forEach(function (i) {
       var macroBits = [];
@@ -1748,6 +1797,8 @@ textarea{resize:vertical;min-height:72px}
     if (s.geminiKey && s.useLlm) {
       btn.disabled = true;
       btn.textContent = "Asking Gemini…";
+    } else {
+      toast("Tip: add a Gemini key in Setup so protein comes from AI for anything you type");
     }
     try {
       const parsed = await parseChatSmart(raw);
@@ -1755,10 +1806,15 @@ textarea{resize:vertical;min-height:72px}
       if (parsed.unknown && parsed.unknown.length && (!parsed.items || !parsed.items.length)) {
         toast("Couldn’t parse that. Add a Gemini key in Setup for free-form meals.");
       }
+      const fromGemini = parsed.sourceNote && parsed.sourceNote.indexOf("gemini") >= 0;
+      if (fromGemini) {
+        const miss = (parsed.items || []).filter(function (i) { return i.protein == null || isNaN(+i.protein); });
+        if (miss.length) toast("Gemini missed protein on " + miss.length + " item(s) — check confirm sheet");
+      }
       confirmMeal({
         items: parsed.items,
         unknown: parsed.unknown,
-        source: parsed.sourceNote && parsed.sourceNote.indexOf("gemini") >= 0 ? "chat-ai" : "chat"
+        source: fromGemini ? "chat-ai" : "chat"
       });
     } finally {
       btn.disabled = false;
