@@ -2338,6 +2338,10 @@ textarea{resize:vertical;min-height:56px}
   document.getElementById("logBtn").onclick = async function () {
     const raw = document.getElementById("text").value;
     const btn = document.getElementById("logBtn");
+    if (!String(raw || "").trim()) {
+      toast("Type a meal first");
+      return;
+    }
     // Parse always goes through Gemini: health-check first so a dead key never
     // silently falls back to the built-in catalog (0 kcal / “couldn’t match”).
     const s = syncAiSettingsFromForm();
