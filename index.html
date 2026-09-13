@@ -737,7 +737,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v48 · Photo pickers: Camera or Photos library — Force refresh if you still only get Camera.";
+    if (ver) ver.textContent = "App build: v49 · Workout photos: week columns count as sets — Force refresh if sets still show as 1.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -2596,7 +2596,13 @@ textarea{resize:vertical;min-height:56px}
     const prompt =
       "You read a handwritten or printed personal trainer workout plan photo.\n" +
       "Return ONLY JSON (no markdown) with keys: name (short title for the set), kind (lifting|cardio|mixed), durationMin (number), estimateKcal (conservative total session burn), exercises (array of {name, detail, sets, reps, durationMin}), notes (short).\n" +
-      "Rules: be conservative on estimateKcal; strength sessions are usually 150–450 kcal for ~45–75 min; do not invent cardio-level burns for lifting; include every exercise you can read; sets/reps as numbers or null; " + meta + noteBit;
+      "Rules: be conservative on estimateKcal; strength sessions are usually 150–450 kcal for ~45–75 min; do not invent cardio-level burns for lifting; include every exercise you can read; sets/reps as numbers or null.\n" +
+      "CRITICAL sheet layout (common trainer log): columns labeled WEEK 1 / WEEK 2 / WEEK 3 / WEEK 4 (each with WT + REP) are often SET columns for one session — NOT four separate calendar weeks of history.\n" +
+      "For each exercise row: sets = how many week columns have a filled weight/reps entry; reps = the rep count written in those cells (e.g. '12x1' or '12' → reps 12); put the weight in detail (e.g. '95 lb').\n" +
+      "Example: Chest Supported Row with Week1–Week4 all filled as WT 95 REP 12x1 → {\"name\":\"Chest Supported Row\",\"detail\":\"95 lb\",\"sets\":4,\"reps\":12}.\n" +
+      "If only Week1–Week3 are filled → sets 3. Do NOT treat the trailing 'x1' after reps as the set count when week columns are filled — that 'x1' is usually just notation, not sets.\n" +
+      "If the sheet clearly is multi-week progress (different loads progressing across weeks for programming over a month) AND the user note says so, prefer the latest filled week and still set sets from how many set-slots that row uses in the active session; when unsure and week columns are identically filled, count filled week columns as sets.\n" +
+      meta + noteBit;
     const pure = String(dataUrl || "");
     const comma = pure.indexOf(",");
     const b64 = comma >= 0 ? pure.slice(comma + 1) : pure;
@@ -2648,13 +2654,41 @@ textarea{resize:vertical;min-height:56px}
       var name = String(parsed.name || "").trim();
       if (!name && userNote) name = String(userNote).trim().slice(0, 48);
       if (!name) name = "Workout";
+      var exercises = (Array.isArray(parsed.exercises) ? parsed.exercises : []).map(function (ex) {
+        if (!ex || typeof ex !== "object") return null;
+        var sets = ex.sets != null && !isNaN(+ex.sets) ? Math.max(0, Math.round(+ex.sets)) : null;
+        var reps = ex.reps != null && !isNaN(+ex.reps) ? Math.max(0, Math.round(+ex.reps)) : null;
+        // If model stuffed "4x12" into detail/name and left sets null, recover sets×reps.
+        if (sets == null || reps == null) {
+          var blob = String(ex.detail || "") + " " + String(ex.name || "");
+          var xm = blob.match(/(\d+)\s*[x×]\s*(\d+)/i);
+          if (xm) {
+            // Prefer larger-first as sets when values look like sets×reps (e.g. 4x12);
+            // if first number is clearly reps-like (>=8) and second is tiny (1–2), treat as reps×notation and keep sets from week-count only.
+            var a = +xm[1], b = +xm[2];
+            if (sets == null && reps == null) {
+              if (a <= 6 && b >= 5) { sets = a; reps = b; }
+              else if (b <= 2 && a >= 5) { reps = a; /* sets stay null unless model/week-count filled it */ }
+              else { sets = a; reps = b; }
+            } else if (sets == null && a <= 8) sets = a;
+            else if (reps == null) reps = b >= 3 ? b : a;
+          }
+        }
+        return {
+          name: String(ex.name || "Exercise").trim() || "Exercise",
+          detail: String(ex.detail || "").trim(),
+          sets: sets,
+          reps: reps,
+          durationMin: ex.durationMin != null && !isNaN(+ex.durationMin) ? Math.max(0, Math.round(+ex.durationMin)) : null
+        };
+      }).filter(Boolean);
       return {
         name: name,
         kind: kind,
         durationMin: parsed.durationMin != null && !isNaN(+parsed.durationMin) ? Math.max(0, Math.round(+parsed.durationMin)) : null,
         estimateKcal: estimate,
         defaultExtraKcal: suggestedWorkoutExtra(estimate, kind),
-        exercises: Array.isArray(parsed.exercises) ? parsed.exercises : [],
+        exercises: exercises,
         notes: String(parsed.notes || userNote || "").trim()
       };
     }
