@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v47-20260913-today-label-photo";
+const CACHE = "snapcal-v48-20260913-photo-library";
 const ASSETS = [
   "./",
   "./index.html",
