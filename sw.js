@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v40-20260913-fix-gemini-parse";
+const CACHE = "snapcal-v41-20260913-force-gemini-parse";
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,8 +9,10 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
+  // Activate immediately — don't wait for old Home Screen tabs to close.
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) => cache.addAll(ASSETS))
   );
 });
 
@@ -18,7 +20,15 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    ).then(function () {
+      return self.clients.claim();
+    }).then(function () {
+      return self.clients.matchAll({ type: "window" }).then(function (clients) {
+        clients.forEach(function (c) {
+          try { c.postMessage({ type: "SNAPCAL_SW_UPDATED", cache: CACHE }); } catch (e) {}
+        });
+      });
+    })
   );
 });
 
@@ -30,12 +40,13 @@ self.addEventListener("fetch", (event) => {
     isNav ||
     url.pathname.endsWith("/") ||
     url.pathname.endsWith("/index.html") ||
-    url.pathname.endsWith("index.html");
+    url.pathname.endsWith("index.html") ||
+    url.pathname.endsWith("sw.js");
 
-  // Always prefer network for the app shell so UI fixes (e.g. duplicate buttons) show up.
+  // Network-first for HTML + SW so Parse fixes land on Home Screen reopen.
   if (isHtml) {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: "no-store" })
         .then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put(event.request, copy));
