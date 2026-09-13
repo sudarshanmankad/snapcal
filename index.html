@@ -41,7 +41,7 @@ body{
     var(--bg);
 }
 main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom))}
-.brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px}
+.brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:2px}
 .brand h1{margin:0;font-size:24px;letter-spacing:-0.03em}
 .eyebrow{margin:0;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase}
 .card{background:var(--card);border:1px solid #f0e7dd;border-radius:16px;padding:10px 12px;margin:6px 0;box-shadow:0 1px 0 #fff inset}
@@ -52,13 +52,6 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 .bar{height:6px;border-radius:999px;background:#efe6dc;overflow:hidden;margin-top:6px}
 .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--sage),var(--accent));border-radius:inherit;width:0%;transition:width .35s ease}
 .over .bar > i{background:var(--accent)}
-.mode-burn .bar > i{background:var(--sage)}
-.mode-bulk .bar > i{background:#d4a017}
-.mode-fat .bar > i{background:var(--accent)}
-.mode-ok .bar > i{background:#6b8f7a}
-.compact-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
-.compact-actions .chip{padding:6px 10px;min-height:32px;font-size:12px}
-.compact-actions .btn{width:auto;margin:0;padding:6px 12px;min-height:32px;font-size:12px;border-radius:12px}
 .mode-burn .bar > i{background:var(--sage)}
 .mode-bulk .bar > i{background:#d4a017}
 .mode-fat .bar > i{background:var(--accent)}
@@ -78,7 +71,7 @@ button{border:0;background:none;color:inherit;cursor:pointer}
 .chip.on{background:var(--ink);color:#fff}
 .chip.ghost{background:#fff;border:1px solid var(--line)}
 textarea,input[type=text],input[type=number]{width:100%;border:1px solid var(--line);border-radius:14px;padding:12px;font-size:16px;background:#fff}
-textarea{resize:vertical;min-height:72px}
+textarea{resize:vertical;min-height:56px}
 .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;padding:8px 12px env(safe-area-inset-bottom);background:#fffdf9ee;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);z-index:20}
 .tabs button{min-height:44px;min-width:64px;font-weight:700;color:var(--muted);font-size:13px}
 .tabs .on{color:var(--ink)}
