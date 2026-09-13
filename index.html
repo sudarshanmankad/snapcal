@@ -161,7 +161,7 @@ textarea{resize:vertical;min-height:72px}
         <p class="big" id="modeNet" style="font-size:22px">—</p>
       </div>
     </div>
-    <p class="tiny" style="margin-top:8px" id="modeDetail">Burning = Move &gt; food. Bulking = eating more + burning more. Fattening = eating more than you burned.</p>
+    <p class="tiny" style="margin-top:8px" id="modeDetail">Uses food vs estimated burn (BMR + Move). Burning = deficit. Bulking = surplus while moving a lot. Fattening = surplus with little Move.</p>
   </div>
 
   <div class="card">
@@ -278,12 +278,20 @@ textarea{resize:vertical;min-height:72px}
   </div>
   <div class="card">
     <p class="eyebrow">Body</p>
-    <p class="muted">Used to compute healthy protein targets from your weight. Height is for BMI context.</p>
+    <p class="muted">Weight drives protein goals. Height, age, and sex estimate BMR (Mifflin–St Jeor) so Burning / Bulking / Fattening uses food vs <b>BMR + Move</b> — not Move alone. Apple Move is activity burn on top of resting metabolism.</p>
     <label class="tiny" style="display:block;margin-top:10px">Height (cm)</label>
     <input type="number" id="heightCm" inputmode="decimal" min="100" max="250" step="0.1" placeholder="e.g. 175" />
     <label class="tiny" style="display:block;margin-top:8px">Weight (kg)</label>
     <input type="number" id="weightKg" inputmode="decimal" min="30" max="300" step="0.1" placeholder="e.g. 75" />
-    <p class="tiny" style="margin-top:8px" id="bodyPreview">Enter height &amp; weight to see BMI and protein goals.</p>
+    <label class="tiny" style="display:block;margin-top:8px">Age (years)</label>
+    <input type="number" id="ageYears" inputmode="numeric" min="14" max="100" step="1" placeholder="e.g. 35" />
+    <label class="tiny" style="display:block;margin-top:8px">Sex (for BMR)</label>
+    <select id="sex" style="width:100%;border:1px solid var(--line);border-radius:14px;padding:12px;font-size:16px;background:#fff">
+      <option value="">Prefer not to say (weight-only BMR estimate)</option>
+      <option value="male">Male</option>
+      <option value="female">Female</option>
+    </select>
+    <p class="tiny" style="margin-top:8px" id="bodyPreview">Enter height &amp; weight to see BMI, BMR, and protein goals.</p>
     <button class="btn primary" id="saveBodyBtn" type="button">Save body</button>
   </div>
   <div class="card">
@@ -388,7 +396,9 @@ textarea{resize:vertical;min-height:72px}
           openShortcutIfEmpty: s.moveSleekV1 ? !!s.openShortcutIfEmpty : false,
           moveSleekV1: !!s.moveSleekV1,
           heightCm: s.heightCm != null && s.heightCm !== "" ? +s.heightCm : null,
-          weightKg: s.weightKg != null && s.weightKg !== "" ? +s.weightKg : null
+          weightKg: s.weightKg != null && s.weightKg !== "" ? +s.weightKg : null,
+          ageYears: s.ageYears != null && s.ageYears !== "" ? +s.ageYears : null,
+          sex: s.sex === "male" || s.sex === "female" ? s.sex : ""
         };
       }
     } catch (e) {}
@@ -403,7 +413,9 @@ textarea{resize:vertical;min-height:72px}
       openShortcutIfEmpty: false,
       moveSleekV1: true,
       heightCm: null,
-      weightKg: null
+      weightKg: null,
+      ageYears: null,
+      sex: ""
     };
   }
 
@@ -433,7 +445,9 @@ textarea{resize:vertical;min-height:72px}
       openShortcutIfEmpty: s.openShortcutIfEmpty != null ? !!s.openShortcutIfEmpty : !!cur.openShortcutIfEmpty,
       moveSleekV1: s.moveSleekV1 != null ? !!s.moveSleekV1 : !!cur.moveSleekV1,
       heightCm: s.heightCm != null ? s.heightCm : (cur.heightCm != null ? cur.heightCm : null),
-      weightKg: s.weightKg != null ? s.weightKg : (cur.weightKg != null ? cur.weightKg : null)
+      weightKg: s.weightKg != null ? s.weightKg : (cur.weightKg != null ? cur.weightKg : null),
+      ageYears: s.ageYears != null ? s.ageYears : (cur.ageYears != null ? cur.ageYears : null),
+      sex: s.sex != null ? s.sex : (cur.sex === "male" || cur.sex === "female" ? cur.sex : "")
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
   }
@@ -524,8 +538,12 @@ textarea{resize:vertical;min-height:72px}
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
+    const ageEl = document.getElementById("ageYears");
+    const sexEl = document.getElementById("sex");
     if (hEl) hEl.value = s.heightCm != null ? s.heightCm : "";
     if (wEl) wEl.value = s.weightKg != null ? s.weightKg : "";
+    if (ageEl) ageEl.value = s.ageYears != null ? s.ageYears : "";
+    if (sexEl) sexEl.value = s.sex === "male" || s.sex === "female" ? s.sex : "";
     updateBodyPreview();
     const snEl = document.getElementById("shortcutName");
     if (snEl) snEl.value = s.shortcutName || "SnapCal Move";
@@ -1338,6 +1356,21 @@ textarea{resize:vertical;min-height:72px}
     }, 0));
   }
 
+  // Mifflin–St Jeor BMR when height/age/sex present; else ~22 kcal/kg resting estimate.
+  // Apple Move / Active Energy is activity on top of resting — not total daily burn.
+  function estimateBmr(s) {
+    const w = s && s.weightKg != null ? +s.weightKg : NaN;
+    if (isNaN(w) || w < 30 || w > 300) return null;
+    const h = s.heightCm != null ? +s.heightCm : NaN;
+    const age = s.ageYears != null ? +s.ageYears : NaN;
+    const sex = s.sex;
+    if (!isNaN(h) && h >= 100 && h <= 250 && !isNaN(age) && age >= 14 && age <= 100 && (sex === "male" || sex === "female")) {
+      const base = 10 * w + 6.25 * h - 5 * age;
+      return Math.round(sex === "male" ? base + 5 : base - 161);
+    }
+    return Math.round(22 * w);
+  }
+
   function bodyMetrics() {
     const s = loadSettings();
     const h = s.heightCm != null ? +s.heightCm : NaN;
@@ -1348,50 +1381,56 @@ textarea{resize:vertical;min-height:72px}
     const active = hasW ? Math.round(w * 1.6) : null;
     var bmi = null;
     if (hasW && hasH) bmi = Math.round((w / ((h / 100) * (h / 100))) * 10) / 10;
-    return { heightCm: hasH ? h : null, weightKg: hasW ? w : null, rda: rda, active: active, bmi: bmi };
+    const bmr = estimateBmr(s);
+    return {
+      heightCm: hasH ? h : null,
+      weightKg: hasW ? w : null,
+      ageYears: s.ageYears != null ? +s.ageYears : null,
+      sex: s.sex === "male" || s.sex === "female" ? s.sex : "",
+      rda: rda,
+      active: active,
+      bmi: bmi,
+      bmr: bmr
+    };
   }
 
+  // Nutritionist-style energy balance: intake vs estimated expenditure (BMR + Move).
+  // Move alone is NOT TDEE — it's activity burn above resting metabolism.
   function energyMode(intake, move) {
+    const body = bodyMetrics();
+    const food = Math.round(+intake || 0);
+    if (body.bmr == null) {
+      return {
+        net: null,
+        label: "Set body",
+        detail: "Add weight in Setup (age/sex optional) to estimate BMR — then mode uses food vs BMR + Move"
+      };
+    }
     if (move == null || !(+move > 0)) {
-      return { net: null, label: "Set Move", detail: "Need Fitness Move to judge Burning / Bulking / Fattening" };
+      return {
+        net: null,
+        label: "Set Move",
+        detail: "BMR ~" + body.bmr + " kcal · add Fitness Move so estimated burn = BMR + Move"
+      };
     }
-    const food = Math.round(+intake);
-    const burn = Math.round(+move);
-    const net = food - burn; // + = eating more than burned
-    const sign = net > 0 ? ("+" + net) : String(net);
+    const burnMove = Math.round(+move);
+    const estimatedOut = body.bmr + burnMove;
+    const balance = food - estimatedOut; // − = deficit (Burning)
+    const sign = balance > 0 ? ("+" + balance) : String(balance);
+    const base = "Food " + food + " vs ~" + estimatedOut + " out (BMR " + body.bmr + " + Move " + burnMove + ") · net " + sign + " kcal";
 
-    // Burning: burned more than you ate (deficit)
-    if (net <= -200) {
-      return {
-        net: net,
-        label: "Burning",
-        detail: "Move " + burn + " > food " + food + " · net " + sign + " kcal · based on Move, not full TDEE"
-      };
+    if (balance <= -200) {
+      return { net: balance, label: "Burning", detail: base + " · deficit" };
     }
-    // Near balance
-    if (net < 200) {
-      return {
-        net: net,
-        label: "Maintain",
-        detail: "Food ≈ Move · net " + sign + " kcal · based on Move, not full TDEE"
-      };
+    if (balance < 200) {
+      return { net: balance, label: "Maintain", detail: base + " · near balance" };
     }
-    // Surplus: eating more than burned
-    // Bulking = also burning a lot (active surplus). Fattening = little burn vs food.
-    const highBurn = burn >= 400;
-    const highEat = food >= BUDGET;
-    if (highBurn && highEat) {
-      return {
-        net: net,
-        label: "Bulking",
-        detail: "Eating more + burning more · net " + sign + " kcal · based on Move, not full TDEE"
-      };
+    // Surplus: eating more than estimated burn
+    const highMove = burnMove >= 400;
+    if (highMove && food >= BUDGET) {
+      return { net: balance, label: "Bulking", detail: base + " · surplus with solid Move" };
     }
-    return {
-      net: net,
-      label: "Fattening",
-      detail: "Eating more than you burned · net " + sign + " kcal · based on Move, not full TDEE"
-    };
+    return { net: balance, label: "Fattening", detail: base + " · surplus (eating above burn)" };
   }
 
   function mealTotal(m) {
@@ -2064,32 +2103,50 @@ textarea{resize:vertical;min-height:72px}
   function updateBodyPreview() {
     const h = parseFloat((document.getElementById("heightCm") || {}).value);
     const w = parseFloat((document.getElementById("weightKg") || {}).value);
+    const age = parseFloat((document.getElementById("ageYears") || {}).value);
+    const sexEl = document.getElementById("sex");
+    const sex = sexEl ? sexEl.value : "";
     const el = document.getElementById("bodyPreview");
     if (!el) return;
     const hasW = !isNaN(w) && w >= 30 && w <= 300;
     const hasH = !isNaN(h) && h >= 100 && h <= 250;
     if (!hasW) {
-      el.textContent = "Enter height & weight to see BMI and protein goals.";
+      el.textContent = "Enter height & weight to see BMI, BMR, and protein goals.";
       return;
     }
     const rda = Math.round(w * 0.8);
     const active = Math.round(w * 1.6);
-    var extra = "Protein goals · RDA " + rda + "g (0.8×kg) · Active " + active + "g (1.6×kg)";
+    const bmr = estimateBmr({
+      weightKg: w,
+      heightCm: hasH ? h : null,
+      ageYears: !isNaN(age) ? age : null,
+      sex: sex
+    });
+    var extra = "BMR ~" + bmr + " kcal · Protein RDA " + rda + "g · Active " + active + "g";
     if (hasH) {
       const bmi = Math.round((w / ((h / 100) * (h / 100))) * 10) / 10;
       extra += " · BMI " + bmi;
+    }
+    if (!(sex === "male" || sex === "female") || isNaN(age)) {
+      extra += " · add age + sex for Mifflin–St Jeor BMR";
     }
     el.textContent = extra;
   }
 
   var heightInp = document.getElementById("heightCm");
   var weightInp = document.getElementById("weightKg");
+  var ageInp = document.getElementById("ageYears");
+  var sexInp = document.getElementById("sex");
   if (heightInp) heightInp.addEventListener("input", updateBodyPreview);
   if (weightInp) weightInp.addEventListener("input", updateBodyPreview);
+  if (ageInp) ageInp.addEventListener("input", updateBodyPreview);
+  if (sexInp) sexInp.addEventListener("change", updateBodyPreview);
 
   document.getElementById("saveBodyBtn").onclick = function () {
     const h = parseFloat(document.getElementById("heightCm").value);
     const w = parseFloat(document.getElementById("weightKg").value);
+    const age = parseFloat(document.getElementById("ageYears").value);
+    const sex = (document.getElementById("sex") || {}).value || "";
     if (isNaN(w) || w < 30 || w > 300) {
       toast("Enter a valid weight in kg (30–300)");
       return;
@@ -2098,14 +2155,21 @@ textarea{resize:vertical;min-height:72px}
       toast("Height must be 100–250 cm (or leave blank)");
       return;
     }
+    if (document.getElementById("ageYears").value !== "" && (isNaN(age) || age < 14 || age > 100)) {
+      toast("Age must be 14–100 (or leave blank)");
+      return;
+    }
     const s = loadSettings();
     s.weightKg = Math.round(w * 10) / 10;
     s.heightCm = document.getElementById("heightCm").value === "" ? null : Math.round(h * 10) / 10;
+    s.ageYears = document.getElementById("ageYears").value === "" ? null : Math.round(age);
+    s.sex = sex === "male" || sex === "female" ? sex : "";
     saveSettings(s);
     updateBodyPreview();
     renderToday();
     renderSetupAi();
-    toast("Body saved · Active protein goal " + Math.round(s.weightKg * 1.6) + "g");
+    const bmr = estimateBmr(s);
+    toast("Body saved · BMR ~" + bmr + " kcal · Active protein " + Math.round(s.weightKg * 1.6) + "g");
   };
 
   document.getElementById("saveMoveAutoBtn").onclick = function () {

@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v30-20260913-protein-bar-mode";
+const CACHE = "snapcal-v31-20260913-tdee-bmr-move";
 const ASSETS = [
   "./",
   "./index.html",
