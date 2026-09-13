@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v49-20260913-workout-week-sets";
+const CACHE = "snapcal-v50-20260913-sleek-cards";
 const ASSETS = [
   "./",
   "./index.html",
