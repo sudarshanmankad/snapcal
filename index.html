@@ -1767,11 +1767,15 @@ textarea{resize:vertical;min-height:72px}
   };
 
   document.getElementById("saveAiBtn").onclick = function () {
-    saveSettings({
-      geminiKey: document.getElementById("geminiKey").value.trim(),
+    // Blank password field must not wipe a stored key (iOS often shows the box empty).
+    // Only "Remove key" clears it on purpose.
+    var typed = document.getElementById("geminiKey").value.trim();
+    var patch = {
       model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
       useLlm: document.getElementById("useLlm").checked
-    });
+    };
+    if (typed) patch.geminiKey = typed;
+    saveSettings(patch);
     renderSetupAi();
     toast(loadSettings().geminiKey ? "AI settings saved on this phone" : "Saved (no key)");
   };
@@ -1791,12 +1795,14 @@ textarea{resize:vertical;min-height:72px}
   };
 
   document.getElementById("testAiBtn").onclick = async function () {
-    // Save current form first so Test uses what you typed
-    saveSettings({
-      geminiKey: document.getElementById("geminiKey").value.trim(),
+    // Save form first; blank key field keeps whatever is already stored.
+    var typed = document.getElementById("geminiKey").value.trim();
+    var patch = {
       model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
       useLlm: document.getElementById("useLlm").checked
-    });
+    };
+    if (typed) patch.geminiKey = typed;
+    saveSettings(patch);
     renderSetupAi();
     const s = loadSettings();
     const status = document.getElementById("aiTestStatus");
