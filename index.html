@@ -895,30 +895,87 @@ textarea{resize:vertical;min-height:72px}
     return best;
   }
 
+  // Stable Gemini parses: same sentence → same macros (temp 0 + short cache).
+  var geminiParseCache = {};
+  function mealCacheKey(text) {
+    return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+  }
+  function simpleSeed(text) {
+    var h = 2166136261;
+    var s = mealCacheKey(text);
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0) % 2147483647;
+  }
+
   function parseWithGemini(text) {
     const s = loadSettings();
     if (!s.geminiKey || !s.useLlm) return Promise.resolve(null);
+    const cacheKey = mealCacheKey(text);
+    if (cacheKey && geminiParseCache[cacheKey]) {
+      return Promise.resolve(geminiParseCache[cacheKey].map(function (it) {
+        var out = {};
+        for (var k in it) if (Object.prototype.hasOwnProperty.call(it, k)) out[k] = it[k];
+        return out;
+      }));
+    }
     const model = encodeURIComponent(migrateGeminiModel(s.model || "gemini-2.5-flash"));
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
     const prompt =
-      "You are a nutrition estimator. The user typed a free-form meal. Estimate every food yourself — do NOT use a fixed catalog.\n" +
+      "You are a nutrition estimator. Be DETERMINISTIC and CONSISTENT: the same meal sentence must produce the same foods and macros every time.\n" +
+      "The user typed a free-form meal. Estimate every food yourself — do NOT use a fixed catalog.\n" +
       "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
       "CRITICAL: every object MUST include a numeric protein in grams (use 0 only if the food truly has none). Protein is as important as kcal.\n" +
-      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; USDA-like densities; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (estimate protein from typical whey ~80%); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
+      "Use stable round numbers (whole kcal; protein/carbs/fat to 0 or 1 decimal). Prefer common USDA-like defaults when unsure rather than inventing a new number each time.\n" +
+      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (typical whey ~80% protein); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
       "Meal: " + text;
     return fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, responseMimeType: "application/json" }
+        generationConfig: {
+          temperature: 0,
+          topP: 0.1,
+          topK: 1,
+          seed: simpleSeed(text),
+          responseMimeType: "application/json"
+        }
       })
     }).then(function (res) {
       return res.json().then(function (data) {
         if (!res.ok) {
           const msg = (data && data.error && data.error.message) || ("Gemini HTTP " + res.status);
+          // Some models reject seed — retry once without it
+          if (/seed/i.test(msg)) {
+            return fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature: 0,
+                  topP: 0.1,
+                  topK: 1,
+                  responseMimeType: "application/json"
+                }
+              })
+            }).then(function (res2) {
+              return res2.json().then(function (data2) {
+                if (!res2.ok) {
+                  throw new Error((data2 && data2.error && data2.error.message) || ("Gemini HTTP " + res2.status));
+                }
+                return data2;
+              });
+            });
+          }
           throw new Error(msg);
         }
+        return data;
+      });
+    }).then(function (data) {
         const rawText = (((data.candidates || [])[0] || {}).content || {}).parts
           ? data.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("")
           : "";
@@ -931,7 +988,7 @@ textarea{resize:vertical;min-height:72px}
           parsed = JSON.parse(m[0]);
         }
         if (!Array.isArray(parsed)) throw new Error("Gemini JSON was not an array");
-        return parsed.map(function (row) {
+        var items = parsed.map(function (row) {
           function numOrNull(v) {
             if (v == null || v === "") return null;
             const n = +v;
@@ -952,7 +1009,8 @@ textarea{resize:vertical;min-height:72px}
               : "Gemini estimate — confirm before trusting.")
           };
         }).filter(function (i) { return i.kcal > 0; });
-      });
+        if (cacheKey && items.length) geminiParseCache[cacheKey] = items;
+        return items;
     });
   }
 
@@ -1633,7 +1691,11 @@ textarea{resize:vertical;min-height:72px}
       saveAll(db);
       learnFromItems(items);
       closeSheet();
-      if (source === "chat") document.getElementById("text").value = "";
+      // Clear chat after any chat save (local or Gemini "chat-ai")
+      if (String(source).indexOf("chat") === 0) {
+        var textEl = document.getElementById("text");
+        if (textEl) textEl.value = "";
+      }
       if (String(source).indexOf("snap") === 0) clearSnap();
       renderToday();
       toast("Saved · " + tot + " kcal" + (protTot ? (" · P " + protTot + "g") : ""));
