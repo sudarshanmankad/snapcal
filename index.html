@@ -302,16 +302,16 @@ textarea{resize:vertical;min-height:56px}
   </div>
   <div class="card">
     <p class="eyebrow">Fitness Move (clipboard only)</p>
-    <p class="muted"><b>Update never opens Shortcuts.</b> Automations copy Active Energy to the clipboard; SnapCal only <b>reads the clipboard</b> when you open the Home Screen app or tap Update — so you stay in SnapCal.</p>
+    <p class="muted"><b>Update never opens Shortcuts.</b> Automations copy Active Energy to the clipboard; SnapCal only <b>reads the clipboard</b> when you open the Home Screen app or tap Update — so you stay in SnapCal. Stale/lower clipboard values are ignored (or confirmed) so they can’t wipe a good Move.</p>
     <p class="oknote" style="margin-top:10px"><b>Shortcut (once):</b><br/>
       1) Find Health Samples → Active Energy → today → Fill Missing <b>OFF</b><br/>
       2) Calculate Statistics → <b>Sum</b><br/>
       3) Round Number → Sum → <b>Integer</b><br/>
-      4) <b>Copy to Clipboard</b> → Rounded Number<br/>
+      4) Text → <code>SNAPCAL_MOVE=</code> · Combine Text → Text + Rounded → <b>Copy to Clipboard</b><br/>
       5) <b>Do not</b> add Open URLs<br/>
       6) Name exactly <b>SnapCal Move</b><br/><br/>
       <b>Automation:</b> Shortcuts → Automation → + → Time of Day → Run Shortcut → SnapCal Move → Ask Before Running <b>OFF</b>. Add one per time (e.g. 8:00, 12:00, 16:00, 20:00). Phone unlocked.<br/><br/>
-      Open Home Screen SnapCal (or tap Update) → Allow Paste if asked → Move updates. No Shortcuts jump.</p>
+      Open Home Screen SnapCal (or tap Update) → Allow Paste if asked → Move updates. No Shortcuts jump. If clipboard is lower than today’s Move, SnapCal asks before replacing.</p>
     <label class="tiny" style="display:block;margin-top:10px">Shortcut name (for rare manual run only)</label>
     <input type="text" id="shortcutName" value="SnapCal Move" />
     <button class="btn primary" id="saveMoveAutoBtn" type="button">Save shortcut name</button>
@@ -398,6 +398,8 @@ textarea{resize:vertical;min-height:56px}
           autoMove: s.moveSleekV1 ? !!s.autoMove : true,
           shortcutName: s.shortcutName || "SnapCal Move",
           lastAutoMoveAt: s.lastAutoMoveAt || 0,
+          lastManualMoveAt: s.lastManualMoveAt || 0,
+          lastAppliedMoveClip: s.lastAppliedMoveClip || "",
           preferClipboard: s.preferClipboard !== false,
           openShortcutIfEmpty: s.moveSleekV1 ? !!s.openShortcutIfEmpty : false,
           moveSleekV1: !!s.moveSleekV1,
@@ -415,6 +417,8 @@ textarea{resize:vertical;min-height:56px}
       autoMove: true,
       shortcutName: "SnapCal Move",
       lastAutoMoveAt: 0,
+      lastManualMoveAt: 0,
+      lastAppliedMoveClip: "",
       preferClipboard: true,
       openShortcutIfEmpty: false,
       moveSleekV1: true,
@@ -447,6 +451,8 @@ textarea{resize:vertical;min-height:56px}
       autoMove: s.autoMove != null ? !!s.autoMove : (cur.autoMove != null ? !!cur.autoMove : true),
       shortcutName: s.shortcutName != null ? s.shortcutName : (cur.shortcutName || "SnapCal Move"),
       lastAutoMoveAt: s.lastAutoMoveAt != null ? s.lastAutoMoveAt : (cur.lastAutoMoveAt || 0),
+      lastManualMoveAt: s.lastManualMoveAt != null ? s.lastManualMoveAt : (cur.lastManualMoveAt || 0),
+      lastAppliedMoveClip: s.lastAppliedMoveClip != null ? s.lastAppliedMoveClip : (cur.lastAppliedMoveClip || ""),
       preferClipboard: s.preferClipboard != null ? !!s.preferClipboard : (cur.preferClipboard !== false),
       openShortcutIfEmpty: s.openShortcutIfEmpty != null ? !!s.openShortcutIfEmpty : !!cur.openShortcutIfEmpty,
       moveSleekV1: s.moveSleekV1 != null ? !!s.moveSleekV1 : !!cur.moveSleekV1,
@@ -1466,10 +1472,12 @@ textarea{resize:vertical;min-height:56px}
     const v = Math.max(0, Math.round(+n));
     if (isNaN(v)) return false;
     const quietSame = opts && opts.quietSame;
+    const clipFp = opts && opts.clipFp;
     const prev = day().move;
     if (quietSame && prev != null && +prev === v) {
       const s0 = loadSettings();
       s0.lastAutoMoveAt = Date.now();
+      if (clipFp) s0.lastAppliedMoveClip = clipFp;
       saveSettings(s0);
       return true;
     }
@@ -1477,19 +1485,25 @@ textarea{resize:vertical;min-height:56px}
     saveAll(db);
     const s = loadSettings();
     s.lastAutoMoveAt = Date.now();
+    if (clipFp) s.lastAppliedMoveClip = clipFp;
     saveSettings(s);
     toast("Move from " + (source || "Fitness") + ": " + v + " kcal");
     try { renderToday(); renderSetupAi(); } catch (e) {}
     return true;
   }
 
+  function moveClipFingerprint(text) {
+    return String(text || "").trim().slice(0, 240);
+  }
+
+  // Returns { n, kind } where kind is "tagged" | "bare" | "health" — or null.
   function parseMovePayload(text) {
     const raw = String(text || "").trim();
     if (!raw) return null;
     let m = raw.match(/SNAPCAL_MOVE\s*[:=]\s*(\d+(?:\.\d+)?)/i);
-    if (m) return Math.round(+m[1]);
+    if (m) return { n: Math.round(+m[1]), kind: "tagged" };
     m = raw.match(/(?:^|[?&\s])move\s*=\s*(\d+(?:\.\d+)?)/i);
-    if (m) return Math.round(+m[1]);
+    if (m) return { n: Math.round(+m[1]), kind: "tagged" };
 
     // Health Samples clipboard dump, e.g.
     // "192.583 Cal\nToday, 6:59 AM\n0 Cal\nTomorrow..."
@@ -1502,27 +1516,29 @@ textarea{resize:vertical;min-height:56px}
       if (n >= 1 && n <= 5000) return n;
       return null;
     }
-    for (let i = 0; i < lines.length; i++) {
-      const n = kcalFromLine(lines[i]);
-      if (n == null || n === 0) continue;
-      const nearby = (lines[i + 1] || "") + " " + (lines[i] || "");
-      if (/today/i.test(nearby) || /today/i.test(lines[i])) return n;
-    }
-    for (let i = 0; i < lines.length; i++) {
-      const n = kcalFromLine(lines[i]);
-      if (n != null && n > 0) return n;
+    if (lines.length > 1) {
+      for (let i = 0; i < lines.length; i++) {
+        const n = kcalFromLine(lines[i]);
+        if (n == null || n === 0) continue;
+        const nearby = (lines[i + 1] || "") + " " + (lines[i] || "");
+        if (/today/i.test(nearby) || /today/i.test(lines[i])) return { n: n, kind: "health" };
+      }
+      for (let i = 0; i < lines.length; i++) {
+        const n = kcalFromLine(lines[i]);
+        if (n != null && n > 0) return { n: n, kind: "health" };
+      }
     }
 
     // bare number (incl. decimals like 192.583)
     m = raw.match(/^(\d+(?:\.\d+)?)\s*(k?cal(?:ories)?)?$/i);
     if (m) {
       const n = Math.round(+m[1]);
-      if (n >= 20 && n <= 5000) return n;
+      if (n >= 20 && n <= 5000) return { n: n, kind: "bare" };
     }
     m = raw.match(/^(\d{2,4})$/);
     if (m) {
       const n = +m[1];
-      if (n >= 20 && n <= 2000) return n;
+      if (n >= 20 && n <= 2000) return { n: n, kind: "bare" };
     }
     return null;
   }
@@ -1561,12 +1577,71 @@ textarea{resize:vertical;min-height:56px}
   }
 
   function applyClipboardMoveText(text, quiet) {
-    const n = parseMovePayload(text);
-    if (n == null) {
+    const parsed = parseMovePayload(text);
+    if (!parsed) {
       if (!quiet) toast("No Move on clipboard yet — wait for Automation, or run SnapCal Move once from Shortcuts.");
       return false;
     }
-    return setMoveKcal(n, "clipboard", { quietSame: !!quiet });
+    const n = parsed.n;
+    const prev = Math.round(+(day().move || 0));
+    const fp = moveClipFingerprint(text);
+    const s = loadSettings();
+
+    // Auto-read: never apply ambiguous Health dumps or anything that would lower Move.
+    // Move from Apple typically only rises during the day — a lower clipboard is usually stale/wrong.
+    if (quiet) {
+      if (parsed.kind === "health") return false;
+      if (prev > 0 && n < prev) return false;
+      // After a manual Edit, ignore untagged clipboard until tagged + >= current.
+      if (s.lastManualMoveAt && Date.now() - s.lastManualMoveAt < 3 * 60 * 60 * 1000) {
+        if (parsed.kind !== "tagged" || n < prev) return false;
+      }
+      // Same clipboard already applied — refresh timestamp only.
+      if (fp && s.lastAppliedMoveClip === fp && prev === n) {
+        return setMoveKcal(n, "clipboard", { quietSame: true, clipFp: fp });
+      }
+      return setMoveKcal(n, "clipboard", { quietSame: true, clipFp: fp });
+    }
+
+    // Explicit Update: confirm before replacing a higher Move with a lower clipboard value.
+    if (prev > 0 && n < prev) {
+      openSheet(
+        '<p class="eyebrow">Clipboard looks stale</p>' +
+        '<h2 style="margin:4px 0 8px">Keep ' + prev + ' or use ' + n + '?</h2>' +
+        '<p class="muted">Clipboard has <b>' + n + ' kcal</b>, but today already has <b>' + prev + ' kcal</b>. Move usually only goes up — lower often means old or wrong copy.</p>' +
+        '<button class="btn primary" id="sheetOk" type="button">Keep ' + prev + '</button>' +
+        '<button class="btn light" id="sheetUseClip" type="button">Use clipboard ' + n + '</button>' +
+        '<button class="btn ghost" id="sheetNo" type="button">Cancel</button>'
+      );
+      document.getElementById("sheetOk").onclick = function () {
+        closeSheet();
+        toast("Kept Move " + prev + " kcal — regenerate / copy again when ready");
+      };
+      document.getElementById("sheetUseClip").onclick = function () {
+        closeSheet();
+        setMoveKcal(n, "clipboard", { clipFp: fp });
+      };
+      document.getElementById("sheetNo").onclick = closeSheet;
+      return "confirm";
+    }
+
+    if (parsed.kind === "health" && prev > 0 && Math.abs(n - prev) > 150) {
+      openSheet(
+        '<p class="eyebrow">Unclear clipboard</p>' +
+        '<h2 style="margin:4px 0 8px">Apply ' + n + ' kcal?</h2>' +
+        '<p class="muted">Clipboard looks like a Health dump (not <code>SNAPCAL_MOVE=</code>). Today is already <b>' + prev + '</b>. Prefer Shortcuts that copy <code>SNAPCAL_MOVE=420</code>.</p>' +
+        '<button class="btn primary" id="sheetOk" type="button">Apply ' + n + '</button>' +
+        '<button class="btn light" id="sheetNo" type="button">Cancel</button>'
+      );
+      document.getElementById("sheetOk").onclick = function () {
+        closeSheet();
+        setMoveKcal(n, "clipboard", { clipFp: fp });
+      };
+      document.getElementById("sheetNo").onclick = closeSheet;
+      return "confirm";
+    }
+
+    return setMoveKcal(n, "clipboard", { quietSame: false, clipFp: fp });
   }
 
   function tryClipboardMove(quiet) {
@@ -1612,14 +1687,20 @@ textarea{resize:vertical;min-height:56px}
       "SnapCal never opens Shortcuts when you tap Update.",
       "Automations copy Active Energy; SnapCal reads the clipboard on open / Update.",
       "",
+      "IMPORTANT: copy tagged text so random clipboard junk can’t overwrite Move:",
+      "  SNAPCAL_MOVE=420",
+      "SnapCal ignores lower/stale clipboard values automatically (Move only rises).",
+      "",
       "Build Shortcut:",
       "1. Shortcuts → + → name exactly: SnapCal Move",
       "2. Find Health Samples → Active Energy → start of today → Fill Missing OFF",
       "3. Calculate Statistics → Sum",
       "4. Round Number → Sum → Integer",
-      "5. Copy to Clipboard → Rounded Number",
-      "6. Do NOT add Open URLs",
-      "7. Save",
+      "5. Text → type: SNAPCAL_MOVE=",
+      "6. Combine Text → Text + Rounded Number  (result like SNAPCAL_MOVE=420)",
+      "7. Copy to Clipboard → Combined Text",
+      "8. Do NOT add Open URLs",
+      "9. Save",
       "",
       "Automation:",
       "Shortcuts → Automation → + → Time of Day → Daily",
@@ -1628,6 +1709,7 @@ textarea{resize:vertical;min-height:56px}
       "Phone must be unlocked.",
       "",
       "Use: open Home Screen SnapCal (or tap Update). Allow Paste if asked.",
+      "If Update warns clipboard is lower than today’s Move — Keep your number and re-run the Shortcut.",
       "Rare: Setup → Run Shortcut in Shortcuts app (manual Health pull)."
     ].join("\n");
   }
@@ -1843,12 +1925,19 @@ textarea{resize:vertical;min-height:56px}
       if (v === "" || isNaN(+v)) { toast("Enter a number"); return; }
       day().move = Math.max(0, Math.round(+v));
       saveAll(db);
+      const s = loadSettings();
+      s.lastManualMoveAt = Date.now();
+      saveSettings(s);
       closeSheet();
       renderToday();
+      toast("Move saved — clipboard won’t lower it automatically");
     };
     document.getElementById("sheetClear").onclick = function () {
       day().move = 0;
       saveAll(db);
+      const s = loadSettings();
+      s.lastManualMoveAt = Date.now();
+      saveSettings(s);
       closeSheet();
       renderToday();
     };
@@ -2201,7 +2290,7 @@ textarea{resize:vertical;min-height:56px}
       toast("Open SnapCal from the Home Screen icon first — Chrome won’t keep your Move.");
     }
     tryClipboardMove(false).then(function (ok) {
-      if (ok) return;
+      if (ok) return; // true or "confirm"
       toast("No Move on clipboard yet — wait for Automation, or use Setup → Run Shortcut in Shortcuts app.");
     });
   }
