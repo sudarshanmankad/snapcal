@@ -2368,7 +2368,8 @@ textarea{resize:vertical;min-height:56px}
   function removeWorkoutSession(id) {
     const d = day();
     d.workouts = normalizeWorkouts(d.workouts).filter(function (w) { return w.id !== id; });
-    syncWorkoutAdj(d);
+    if (!d.workouts.length) d.workoutAdj = 0; // last session removed → clear extra
+    else syncWorkoutAdj(d);
     saveAll(db);
   }
 
