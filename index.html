@@ -217,7 +217,7 @@ textarea{resize:vertical;min-height:56px}
         <button class="chip ghost" id="workoutManualBtn" type="button">Extra</button>
         <label class="btn primary" id="workoutPhotoBtn" style="width:auto;margin:0;padding:6px 12px;min-height:32px;font-size:12px;border-radius:12px;display:inline-flex;align-items:center;cursor:pointer">
           Add photo
-          <input id="workoutPhotoInput" type="file" accept="image/*" capture="environment" class="hide" />
+          <input id="workoutPhotoInput" type="file" accept="image/*" class="hide" />
         </label>
       </div>
     </div>
@@ -254,7 +254,7 @@ textarea{resize:vertical;min-height:56px}
     <textarea id="text" rows="2" placeholder="Half a serving — then snap the label" style="min-height:56px;margin:0"></textarea>
     <div class="chat-photo-row">
       <button class="btn light filebtn" type="button" id="chatCamBtn">Label photo
-        <input id="chatCam" type="file" accept="image/*" capture="environment" />
+        <input id="chatCam" type="file" accept="image/*" />
       </button>
       <div class="chat-thumb-wrap hide" id="chatPhotoWrap">
         <img class="chat-thumb" id="chatPhotoPreview" alt="Label preview" />
@@ -287,7 +287,7 @@ textarea{resize:vertical;min-height:56px}
     <p class="muted" id="snapHint">Plate: attach a photo, then pick foods. Estimate only — confirm before save.</p>
     <button class="btn light filebtn" type="button">
       Take / choose photo
-      <input id="cam" type="file" accept="image/*" capture="environment" />
+      <input id="cam" type="file" accept="image/*" />
     </button>
     <div class="preview-wrap hide" id="previewWrap"><img id="preview" alt="Selected photo preview" /></div>
     <div id="snapActions" class="hide" style="margin-top:10px">
@@ -737,7 +737,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v47 · Today: note + label photo → one Gemini parse — Force refresh if Parse has no Label photo.";
+    if (ver) ver.textContent = "App build: v48 · Photo pickers: Camera or Photos library — Force refresh if you still only get Camera.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
