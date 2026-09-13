@@ -259,7 +259,7 @@ textarea{resize:vertical;min-height:56px}
 <section id="snapView" class="panel hide">
   <p class="eyebrow">Camera</p>
   <h1 style="margin:4px 0 8px;font-size:28px">Snap</h1>
-  <p class="muted">Photos help you remember. Calories still need your confirm — plate photos are not barcode-grade.</p>
+  <p class="muted">Plate = pick foods. Label = Gemini reads the package nutrition panel — you only confirm servings.</p>
 
   <div class="seg" id="snapMode">
     <button type="button" class="on" data-mode="plate">Plate</button>
@@ -277,11 +277,29 @@ textarea{resize:vertical;min-height:56px}
     <div id="snapActions" class="hide" style="margin-top:10px">
       <div class="chips" id="snapFoods"></div>
       <div id="labelFields" class="hide" style="margin-top:10px">
-        <label class="tiny">Calories per serving (from label)</label>
-        <input type="number" id="labelKcal" inputmode="numeric" placeholder="e.g. 120" />
-        <label class="tiny" style="display:block;margin-top:8px">Servings eaten</label>
+        <p class="tiny" id="labelAiStatus">Take a clear photo of the nutrition label — Gemini reads kcal &amp; macros. You only say how much you ate.</p>
+        <button class="btn light" id="labelReadBtn" type="button" style="margin:8px 0">Read label with Gemini</button>
+        <label class="tiny" style="display:block">Product name</label>
+        <input type="text" id="labelName" placeholder="Filled from label photo" />
+        <label class="tiny" style="display:block;margin-top:8px">Calories per serving</label>
+        <input type="number" id="labelKcal" inputmode="numeric" placeholder="from Gemini / label" />
+        <div class="row" style="gap:8px;margin-top:8px">
+          <div style="flex:1;min-width:0">
+            <label class="tiny">Protein g / serving</label>
+            <input type="number" id="labelProtein" inputmode="decimal" step="0.1" placeholder="optional" />
+          </div>
+          <div style="flex:1;min-width:0">
+            <label class="tiny">Carbs g</label>
+            <input type="number" id="labelCarbs" inputmode="decimal" step="0.1" placeholder="optional" />
+          </div>
+          <div style="flex:1;min-width:0">
+            <label class="tiny">Fat g</label>
+            <input type="number" id="labelFat" inputmode="decimal" step="0.1" placeholder="optional" />
+          </div>
+        </div>
+        <label class="tiny" style="display:block;margin-top:8px">Servings you ate</label>
         <input type="number" id="labelServings" inputmode="decimal" step="0.1" value="1" />
-        <p class="oknote">Label + servings ≈ source of truth for packaged food.</p>
+        <p class="oknote">Photo → Gemini reads the label. You only adjust servings (e.g. 0.5 or 2).</p>
       </div>
       <div id="fitnessFields" class="hide" style="margin-top:10px">
         <label class="tiny">Move / Active Energy (kcal)</label>
@@ -703,7 +721,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v44 · Workout Sets (photo → reusable set) — Force refresh if Today has no Workout card.";
+    if (ver) ver.textContent = "App build: v45 · Label photo → Gemini reads Nutrition Facts — Force refresh if Label still asks you to type kcal.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -1915,6 +1933,7 @@ textarea{resize:vertical;min-height:56px}
   let snapMode = "plate";
   let snapPhotoData = null;
   let selectedSnapFoods = {};
+  let labelDraft = null; // last Gemini label read { name, kcalPerServing, protein, carbs, fat, servingSize }
 
   function setMoveKcal(n, source, opts) {
     const v = Math.max(0, Math.round(+n));
@@ -2385,8 +2404,8 @@ textarea{resize:vertical;min-height:56px}
   }
 
   function confirmMeal(opts) {
-    // Gemini meals: trust model protein. Local/chips: fill from catalog if missing.
-    const fromGemini = opts.source === "chat-ai";
+    // Gemini chat + label-photo: trust model / label macros. Local chips: fill from catalog if missing.
+    const fromGemini = opts.source === "chat-ai" || opts.source === "snap-label";
     const items = (opts.items || []).map(function (item) {
       return fromGemini ? item : withEstimatedProtein(item);
     });
@@ -2399,7 +2418,11 @@ textarea{resize:vertical;min-height:56px}
     let body =
       "<p class='eyebrow'>Confirm</p><h2 style='margin:4px 0 8px'>Save meal? " + tot + " kcal" + (protTot ? (" · P " + protTot + "g") : "") + "</h2>";
     if (fromGemini) {
-      body += "<p class='tiny' style='margin:0 0 8px'>Protein from Gemini" + (missingP ? " (some items missing P — re-parse if wrong)" : "") + "</p>";
+      body += "<p class='tiny' style='margin:0 0 8px'>" +
+        (opts.source === "snap-label"
+          ? ("From nutrition label photo" + (missingP ? " (protein missing — check label)" : ""))
+          : ("Protein from Gemini" + (missingP ? " (some items missing P — re-parse if wrong)" : ""))) +
+        "</p>";
     }
     if (photo) body += '<img src="' + photo + '" alt="" style="width:100%;border-radius:14px;margin:6px 0 10px;max-height:160px;object-fit:cover" />';
     items.forEach(function (i) {
@@ -2579,6 +2602,149 @@ textarea{resize:vertical;min-height:56px}
     }
     return tryAt(0, null);
   }
+
+  function parseLabelImage(dataUrl) {
+    const s = loadSettings();
+    if (!s.geminiKey || !s.useLlm) {
+      return Promise.reject(new Error("Add a Gemini key in Setup to read labels from photos."));
+    }
+    const modelsTry = [];
+    const preferred = migrateGeminiModel(s.model || "gemini-3.5-flash");
+    modelsTry.push(preferred);
+    ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"].forEach(function (m) {
+      if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
+    });
+    const prompt =
+      "You read a packaged food nutrition facts / label photo.\n" +
+      "Return ONLY JSON (no markdown) with keys: name (product name if visible, else short description), brand (string or null), " +
+      "servingSize (text like \\"1 bar (40g)\\" or null), kcalPerServing (number — Calories per serving from the label), " +
+      "protein (grams per serving, number or null), carbs (grams per serving, number or null), fat (grams per serving, number or null), " +
+      "notes (short, e.g. if label is blurry).\n" +
+      "Rules: read the Nutrition Facts panel carefully; kcalPerServing is required when calories are visible; " +
+      "do not invent a product if you cannot read it — use a best-effort name; macros are per ONE serving as printed; no markdown.";
+    const pure = String(dataUrl || "");
+    const comma = pure.indexOf(",");
+    const b64 = comma >= 0 ? pure.slice(comma + 1) : pure;
+    const mime = (pure.match(/^data:([^;]+);/) || [])[1] || "image/jpeg";
+
+    function postModel(modelName) {
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(modelName) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            role: "user",
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: mime, data: b64 } }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json"
+          }
+        })
+      }).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error((data && data.error && data.error.message) || ("Gemini HTTP " + res.status));
+          return data;
+        });
+      });
+    }
+
+    function numOrNull(v) {
+      if (v == null || v === "") return null;
+      const n = +v;
+      return isNaN(n) ? null : Math.max(0, Math.round(n * 10) / 10);
+    }
+
+    function parseResponse(data) {
+      const rawText = (((data.candidates || [])[0] || {}).content || {}).parts
+        ? data.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("")
+        : "";
+      var parsed;
+      try { parsed = JSON.parse(rawText); }
+      catch (e) {
+        const m = rawText.match(/\{[\s\S]*\}/);
+        if (!m) throw new Error("Gemini returned non-JSON for label");
+        parsed = JSON.parse(m[0]);
+      }
+      var kcal = Math.max(0, Math.round(+parsed.kcalPerServing || +parsed.calories || +parsed.kcal || 0));
+      if (!kcal) throw new Error("Couldn’t read calories on this label — retake closer / brighter, or type kcal.");
+      var name = String(parsed.name || "").trim();
+      if (parsed.brand && name && name.toLowerCase().indexOf(String(parsed.brand).toLowerCase()) < 0) {
+        name = String(parsed.brand).trim() + " " + name;
+      }
+      if (!name) name = "Packaged food";
+      return {
+        name: name,
+        brand: parsed.brand ? String(parsed.brand).trim() : "",
+        servingSize: parsed.servingSize ? String(parsed.servingSize).trim() : "",
+        kcalPerServing: kcal,
+        protein: numOrNull(parsed.protein),
+        carbs: numOrNull(parsed.carbs != null ? parsed.carbs : parsed.carbohydrates),
+        fat: numOrNull(parsed.fat),
+        notes: String(parsed.notes || "").trim()
+      };
+    }
+
+    function tryAt(i, lastErr) {
+      if (i >= modelsTry.length) {
+        return Promise.reject(lastErr || new Error("Gemini label read failed"));
+      }
+      return postModel(modelsTry[i]).then(parseResponse).catch(function (err) {
+        return tryAt(i + 1, err);
+      });
+    }
+    return tryAt(0, null);
+  }
+
+  function applyLabelDraftToForm(draft) {
+    labelDraft = draft || null;
+    if (!draft) return;
+    var nameEl = document.getElementById("labelName");
+    var kcalEl = document.getElementById("labelKcal");
+    var pEl = document.getElementById("labelProtein");
+    var cEl = document.getElementById("labelCarbs");
+    var fEl = document.getElementById("labelFat");
+    var st = document.getElementById("labelAiStatus");
+    if (nameEl) nameEl.value = draft.name || "";
+    if (kcalEl) kcalEl.value = draft.kcalPerServing != null ? draft.kcalPerServing : "";
+    if (pEl) pEl.value = draft.protein != null ? draft.protein : "";
+    if (cEl) cEl.value = draft.carbs != null ? draft.carbs : "";
+    if (fEl) fEl.value = draft.fat != null ? draft.fat : "";
+    if (st) {
+      st.textContent = "Gemini read: " + (draft.name || "food") + " · " + (draft.kcalPerServing || "?") +
+        " kcal/serving" + (draft.servingSize ? (" (" + draft.servingSize + ")") : "") +
+        ". Adjust servings eaten, then Review & save.";
+    }
+  }
+
+  function readLabelPhotoWithGemini() {
+    if (!snapPhotoData) {
+      toast("Take a photo of the nutrition label first");
+      return Promise.resolve(null);
+    }
+    const s = loadSettings();
+    if (!s.geminiKey || !s.useLlm) {
+      toast("Add a Gemini key in Setup to read labels");
+      return Promise.resolve(null);
+    }
+    const st = document.getElementById("labelAiStatus");
+    if (st) st.textContent = "Reading nutrition label with Gemini…";
+    toast("Reading label…");
+    return parseLabelImage(snapPhotoData).then(function (draft) {
+      applyLabelDraftToForm(draft);
+      toast("Label read · " + draft.kcalPerServing + " kcal/serving");
+      return draft;
+    }).catch(function (err) {
+      if (st) st.textContent = (err && err.message) || "Couldn’t read label — retake or type kcal.";
+      toast((err && err.message) || "Couldn’t read label");
+      return null;
+    });
+  }
+
 
   function logWorkoutSession(opts) {
     const d = day();
@@ -2973,11 +3139,22 @@ textarea{resize:vertical;min-height:56px}
   function clearSnap() {
     snapPhotoData = null;
     selectedSnapFoods = {};
+    labelDraft = null;
     document.getElementById("preview").removeAttribute("src");
     document.getElementById("previewWrap").classList.add("hide");
     document.getElementById("cam").value = "";
+    var ln = document.getElementById("labelName");
+    if (ln) ln.value = "";
     document.getElementById("labelKcal").value = "";
+    var lp = document.getElementById("labelProtein");
+    if (lp) lp.value = "";
+    var lc = document.getElementById("labelCarbs");
+    if (lc) lc.value = "";
+    var lf = document.getElementById("labelFat");
+    if (lf) lf.value = "";
     document.getElementById("labelServings").value = "1";
+    var st = document.getElementById("labelAiStatus");
+    if (st) st.textContent = "Take a clear photo of the nutrition label — Gemini reads kcal & macros. You only say how much you ate.";
     document.getElementById("fitKcal").value = "";
     renderSnapFoodChips();
     updateSnapModeUI();
@@ -3009,7 +3186,7 @@ textarea{resize:vertical;min-height:56px}
       if (!snapPhotoData) actions.classList.add("hide");
       else actions.classList.remove("hide");
     } else if (snapMode === "label") {
-      hint.textContent = "Label: photo optional for your records. Type kcal/serving × how many you ate.";
+      hint.textContent = "Label: photo the Nutrition Facts panel — Gemini fills kcal/macros. You only set servings eaten.";
       labelF.classList.remove("hide");
       foods.classList.add("hide");
       actions.classList.remove("hide");
@@ -3341,6 +3518,9 @@ textarea{resize:vertical;min-height:56px}
         document.getElementById("previewWrap").classList.remove("hide");
         document.getElementById("snapActions").classList.remove("hide");
         renderSnapFoodChips();
+        if (snapMode === "label") {
+          readLabelPhotoWithGemini();
+        }
       };
       img.src = reader.result;
     };
@@ -3357,6 +3537,10 @@ textarea{resize:vertical;min-height:56px}
 
   document.getElementById("snapClear").onclick = clearSnap;
 
+  document.getElementById("labelReadBtn").onclick = function () {
+    readLabelPhotoWithGemini();
+  };
+
   document.getElementById("snapConfirm").onclick = function () {
     if (snapMode === "fitness") {
       const v = document.getElementById("fitKcal").value;
@@ -3370,17 +3554,32 @@ textarea{resize:vertical;min-height:56px}
       return;
     }
     if (snapMode === "label") {
+      const name = (document.getElementById("labelName").value || "").trim() || "Packaged food";
       const kcal = +document.getElementById("labelKcal").value;
       const serv = +document.getElementById("labelServings").value;
-      if (!kcal || !serv) { toast("Enter label kcal and servings"); return; }
+      if (!kcal || !(serv > 0)) { toast("Need kcal/serving (from Gemini or typed) and servings eaten"); return; }
       const total = Math.round(kcal * serv);
+      function scaleMacro(elId) {
+        const el = document.getElementById(elId);
+        if (!el || el.value === "" || isNaN(+el.value)) return null;
+        return Math.round(+el.value * serv * 10) / 10;
+      }
+      const protein = scaleMacro("labelProtein");
+      const carbs = scaleMacro("labelCarbs");
+      const fat = scaleMacro("labelFat");
+      const servingSize = labelDraft && labelDraft.servingSize ? labelDraft.servingSize : "";
+      const detailBits = [kcal + " kcal/serving × " + serv];
+      if (servingSize) detailBits.push(servingSize);
       confirmMeal({
         items: [{
-          name: "Label food",
-          detail: kcal + " kcal/serving × " + serv,
+          name: name,
+          detail: detailBits.join(" · "),
           kcal: total,
+          protein: protein,
+          carbs: carbs,
+          fat: fat,
           grade: "label",
-          warn: ""
+          warn: labelDraft ? "From label photo via Gemini — check servings." : "Manual label entry."
         }],
         source: "snap-label",
         photo: snapPhotoData
