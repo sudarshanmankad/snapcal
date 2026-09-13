@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v43-20260913-food-names";
+const CACHE = "snapcal-v44-20260913-workout-sets";
 const ASSETS = [
   "./",
   "./index.html",
@@ -43,7 +43,7 @@ self.addEventListener("fetch", (event) => {
     url.pathname.endsWith("index.html") ||
     url.pathname.endsWith("sw.js");
 
-  // Network-first for HTML + SW so Parse fixes land on Home Screen reopen.
+  // Network-first for HTML + SW so Parse / Workout fixes land on Home Screen reopen.
   if (isHtml) {
     event.respondWith(
       fetch(event.request, { cache: "no-store" })
