@@ -757,7 +757,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v50 · Sleeker Workout + chat cards — Force refresh if cards still look tall.";
+    if (ver) ver.textContent = "App build: v51 · History calendar fix — Force refresh if History still empty.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -2329,6 +2329,7 @@ textarea{resize:vertical;min-height:56px}
     }
     renderWorkoutCard();
   }
+  let calYear = null;
   let calMonth = null; // 0–11
   let histFocusKey = null;
 
