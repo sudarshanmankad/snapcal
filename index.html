@@ -52,10 +52,32 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 .bar{height:6px;border-radius:999px;background:#efe6dc;overflow:hidden;margin-top:6px}
 .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--sage),var(--accent));border-radius:inherit;width:0%;transition:width .35s ease}
 .over .bar > i{background:var(--accent)}
-.mode-burn .bar > i{background:var(--sage)}
-.mode-bulk .bar > i{background:#d4a017}
-.mode-fat .bar > i{background:var(--accent)}
-.mode-ok .bar > i{background:#6b8f7a}
+.mode-card{transition:background .35s ease,border-color .35s ease,box-shadow .35s ease}
+.mode-card .mode-icon{width:52px;height:52px;flex-shrink:0;display:grid;place-items:center;border-radius:14px;background:#fff8;border:1px solid #ffffffaa}
+.mode-card .mode-icon svg{width:34px;height:34px;display:block}
+.mode-burn{background:linear-gradient(135deg,#fff4ec 0%,#ffe0c8 55%,#ffd2b0 100%);border-color:#f0c4a4}
+.mode-burn .mode-icon{color:#d84315;background:#fff6f0;box-shadow:0 0 0 1px #f5c4a855}
+.mode-burn .big{color:#b33a12}
+.mode-bulk{background:linear-gradient(135deg,#fff9eb 0%,#ffe9b8 55%,#ffd98a 100%);border-color:#e8d090}
+.mode-bulk .mode-icon{color:#9a6b1f;background:#fffaf0}
+.mode-bulk .big{color:#7a5414}
+.mode-fat{background:linear-gradient(135deg,#fff0f0 0%,#ffd6d0 55%,#ffc4bc 100%);border-color:#f0b8b0}
+.mode-fat .mode-icon{color:#c44a3a;background:#fff5f3}
+.mode-fat .big{color:#a33a30}
+.mode-ok{background:linear-gradient(135deg,#eef6f2 0%,#d8ebe2 55%,#c5e0d4 100%);border-color:#b5d4c6}
+.mode-ok .mode-icon{color:#2f6f5e;background:#f4faf7}
+.mode-ok .big{color:#245245}
+.mode-wait{background:var(--card);border-color:#f0e7dd}
+.mode-wait .mode-icon{color:var(--muted);background:#f7f2ec}
+@keyframes mode-flicker{0%,100%{transform:scale(1) translateY(0)}50%{transform:scale(1.06) translateY(-1px)}}
+@keyframes mode-flex{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes mode-soft{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+.mode-burn .mode-icon svg{animation:mode-flicker 2.2s ease-in-out infinite;transform-origin:center bottom}
+.mode-bulk .mode-icon svg{animation:mode-flex 2.8s ease-in-out infinite}
+.mode-fat .mode-icon svg{animation:mode-soft 3.2s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){
+  .mode-burn .mode-icon svg,.mode-bulk .mode-icon svg,.mode-fat .mode-icon svg{animation:none}
+}
 .compact-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
 .compact-actions .chip{padding:6px 10px;min-height:32px;font-size:12px}
 .compact-actions .btn{width:auto;margin:0;padding:6px 12px;min-height:32px;font-size:12px;border-radius:12px}
@@ -157,18 +179,14 @@ textarea{resize:vertical;min-height:56px}
     <div class="bar"><i id="proteinBarFill"></i></div>
   </div>
 
-  <div class="card" id="modeCard">
+  <div class="card mode-card mode-wait" id="modeCard">
     <div class="row">
-      <div>
+      <div style="min-width:0">
         <p class="muted">Mode</p>
         <p class="big" id="modeLabel">Set Move</p>
       </div>
-      <div style="text-align:right">
-        <p class="muted">Net</p>
-        <p class="big" id="modeNet">—</p>
-      </div>
+      <div class="mode-icon" id="modeIcon" aria-hidden="true"></div>
     </div>
-    <div class="bar"><i id="modeBarFill"></i></div>
   </div>
 
   <div class="card">
@@ -1445,6 +1463,46 @@ textarea{resize:vertical;min-height:56px}
     return { net: balance, label: "Fattening", detail: base + " · surplus (eating above burn)" };
   }
 
+  function modeIconSvg(label) {
+    // Inline SVGs (not emoji) — fire / muscle / soft fat / balance / wait
+    if (label === "Burning") {
+      return '<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">' +
+        '<path d="M24 5c1.5 5.5-1.5 9-1.5 14 0 3.2 2.2 5.5 5.2 5.5 4.2 0 7.3-4.2 7.3-10.2 5.5 5.2 8 11.2 8 16.5C43 39.5 35.5 46 24 46S5 39.5 5 30.8C5 22.5 10.2 16.2 16 12c-1.2 4.2 1 8.2 4.2 8.2 2.2 0 3.5-2.2 3.5-5.2 0-4.2-1.8-7.2.3-10z" fill="currentColor"/>' +
+        '<path d="M24 27.5c0 4.2 2.2 7.2 5.2 7.2 2.2 0 4-2 4-5.2 0-4-3-6.2-5.2-8.5-1.2 2.2-4 3.5-4 6.5z" fill="#fff" opacity=".42"/>' +
+        '</svg>';
+    }
+    if (label === "Bulking") {
+      // Classic side-view flexed bicep (upper arm + forearm + fist)
+      return '<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">' +
+        '<path d="M6 32.5c0-3.2 1.8-5.8 4.5-7.2 1.2-.6 2.2-1.8 2.6-3.2L15 14.5c.8-2.4 3-4 5.5-4 2.8 0 5.2 2.2 5.2 5v3.2c.8-.3 1.7-.5 2.6-.5 2.4 0 4.4 1.4 5.4 3.5l1.2 2.6c.4.8 1.2 1.4 2.1 1.6 3.2.7 5.5 3.5 5.5 6.8v2.2c0 1.6-1.2 2.8-2.8 2.8h-2.2v5.8c0 1.6-1.3 2.9-2.9 2.9H16.8c-1.6 0-2.9-1.3-2.9-2.9v-5.2c-4.2-.6-7.9-3.6-7.9-8.1z" fill="currentColor"/>' +
+        '<ellipse cx="22" cy="24.5" rx="6.5" ry="5.2" fill="#fff" opacity=".22"/>' +
+        '<path d="M28.5 20c1 2.2 1.2 5 .2 7.5" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".35"/>' +
+        '</svg>';
+    }
+    if (label === "Fattening") {
+      // Soft round belly silhouette
+      return '<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">' +
+        '<path d="M9 31c0-7.5 6.2-13.5 15-13.5S39 23.5 39 31c0 2.8-1.2 5.4-3.4 7-2.2 1.6-5.2 2.5-11.6 2.5s-9.4-.9-11.6-2.5C10.2 36.4 9 33.8 9 31z" fill="currentColor"/>' +
+        '<ellipse cx="24" cy="23" rx="11.5" ry="8.5" fill="currentColor" opacity=".82"/>' +
+        '<circle cx="18" cy="25" r="2.1" fill="#fff" opacity=".4"/><circle cx="29" cy="27" r="2.7" fill="#fff" opacity=".32"/>' +
+        '<path d="M16 13.5c2.4-3.6 7-5.2 11.2-4.2 3.2.8 5.6 3.2 6.6 5.8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" opacity=".45"/>' +
+        '</svg>';
+    }
+    if (label === "Maintain") {
+      return '<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">' +
+        '<path d="M8 24h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>' +
+        '<rect x="6" y="18" width="10" height="12" rx="3" fill="currentColor"/><rect x="32" y="18" width="10" height="12" rx="3" fill="currentColor"/>' +
+        '<circle cx="24" cy="24" r="4" fill="currentColor"/>' +
+        '<path d="M24 10v8M24 30v8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>' +
+        '</svg>';
+    }
+    return '<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">' +
+      '<circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="3" opacity=".55"/>' +
+      '<path d="M24 16v10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>' +
+      '<circle cx="24" cy="32" r="2.2" fill="currentColor"/>' +
+      '</svg>';
+  }
+
   function mealTotal(m) {
     return (m.items || []).reduce(function (a, i) { return a + (i.kcal || 0); }, 0);
   }
@@ -1737,27 +1795,17 @@ textarea{resize:vertical;min-height:56px}
     if (pCard) pCard.classList.toggle("over", prot > PROTEIN_GOAL);
     const mode = energyMode(e, d.move);
     const modeLabel = document.getElementById("modeLabel");
-    const modeNet = document.getElementById("modeNet");
-    const modeBar = document.getElementById("modeBarFill");
+    const modeIcon = document.getElementById("modeIcon");
     const modeCard = document.getElementById("modeCard");
     if (modeLabel) modeLabel.textContent = mode.label;
-    if (modeNet) modeNet.textContent = mode.net == null ? "—" : ((mode.net > 0 ? "+" : "") + mode.net);
+    if (modeIcon) modeIcon.innerHTML = modeIconSvg(mode.label);
     if (modeCard) {
-      modeCard.classList.remove("mode-burn", "mode-bulk", "mode-fat", "mode-ok", "over");
+      modeCard.classList.remove("mode-burn", "mode-bulk", "mode-fat", "mode-ok", "mode-wait", "over");
       if (mode.label === "Burning") modeCard.classList.add("mode-burn");
       else if (mode.label === "Bulking") modeCard.classList.add("mode-bulk");
       else if (mode.label === "Fattening") modeCard.classList.add("mode-fat");
       else if (mode.label === "Maintain") modeCard.classList.add("mode-ok");
-    }
-    if (modeBar) {
-      // Map net deficit/surplus into a 0–100 bar (center-ish at maintain).
-      var pctMode = 50;
-      if (mode.net != null) {
-        pctMode = Math.max(0, Math.min(100, Math.round(50 + (mode.net / 10))));
-      } else {
-        pctMode = 0;
-      }
-      modeBar.style.width = pctMode + "%";
+      else modeCard.classList.add("mode-wait");
     }
     document.getElementById("count").textContent = (d.meals || []).length;
     const list = document.getElementById("meals");
