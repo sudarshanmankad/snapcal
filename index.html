@@ -42,16 +42,30 @@ body{
 }
 main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom))}
 .brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px}
-.brand h1{margin:0;font-size:30px;letter-spacing:-0.03em}
+.brand h1{margin:0;font-size:24px;letter-spacing:-0.03em}
 .eyebrow{margin:0;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase}
-.card{background:var(--card);border:1px solid #f0e7dd;border-radius:20px;padding:14px;margin:10px 0;box-shadow:0 1px 0 #fff inset}
+.card{background:var(--card);border:1px solid #f0e7dd;border-radius:16px;padding:10px 12px;margin:6px 0;box-shadow:0 1px 0 #fff inset}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.big{font-size:28px;font-weight:750;margin:0;letter-spacing:-0.02em}
-.muted{color:var(--muted);margin:0;font-size:13px;line-height:1.4}
+.big{font-size:20px;font-weight:750;margin:0;letter-spacing:-0.02em;line-height:1.15}
+.muted{color:var(--muted);margin:0;font-size:11px;line-height:1.25;font-weight:650}
 .tiny{font-size:12px;color:var(--muted)}
-.bar{height:8px;border-radius:999px;background:#efe6dc;overflow:hidden;margin-top:10px}
+.bar{height:6px;border-radius:999px;background:#efe6dc;overflow:hidden;margin-top:6px}
 .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--sage),var(--accent));border-radius:inherit;width:0%;transition:width .35s ease}
 .over .bar > i{background:var(--accent)}
+.mode-burn .bar > i{background:var(--sage)}
+.mode-bulk .bar > i{background:#d4a017}
+.mode-fat .bar > i{background:var(--accent)}
+.mode-ok .bar > i{background:#6b8f7a}
+.compact-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.compact-actions .chip{padding:6px 10px;min-height:32px;font-size:12px}
+.compact-actions .btn{width:auto;margin:0;padding:6px 12px;min-height:32px;font-size:12px;border-radius:12px}
+.mode-burn .bar > i{background:var(--sage)}
+.mode-bulk .bar > i{background:#d4a017}
+.mode-fat .bar > i{background:var(--accent)}
+.mode-ok .bar > i{background:#6b8f7a}
+.compact-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.compact-actions .chip{padding:6px 10px;min-height:32px;font-size:12px}
+.compact-actions .btn{width:auto;margin:0;padding:6px 12px;min-height:32px;font-size:12px;border-radius:12px}
 button,textarea,input,select{font:inherit}
 button{border:0;background:none;color:inherit;cursor:pointer}
 .btn{display:block;width:100%;min-height:48px;border-radius:16px;font-weight:700;margin-top:8px}
@@ -112,68 +126,67 @@ textarea{resize:vertical;min-height:72px}
   <div class="card" id="budgetCard">
     <div class="row">
       <div>
-        <p class="muted">Remaining · food only</p>
+        <p class="muted">Food left</p>
         <p class="big" id="left">1800 kcal</p>
       </div>
       <div style="text-align:right">
         <p class="muted">Eaten</p>
-        <p class="big" id="eaten" style="font-size:22px">0</p>
+        <p class="big" id="eaten">0</p>
       </div>
     </div>
     <div class="bar"><i id="barFill"></i></div>
-    <p class="tiny" style="margin-top:8px">1800 is intake, not net. Move kcal are tracked separately — not added back to food.</p>
   </div>
 
   <div class="card" id="moveCard">
-    <div class="row" style="align-items:center;gap:8px">
-      <div style="flex:1;min-width:0">
-        <p class="eyebrow" style="margin:0">Fitness Move</p>
-        <p class="big" id="move" style="font-size:22px;margin:0">Not set</p>
+    <div class="row">
+      <div style="min-width:0">
+        <p class="muted">Move</p>
+        <p class="big" id="move">—</p>
       </div>
-      <button class="chip ghost" id="editMoveBtn" type="button">Edit</button>
-      <button class="btn primary" id="updateMoveBtn" type="button" style="width:auto;margin:0;padding:10px 14px">Update</button>
+      <div class="compact-actions">
+        <button class="chip ghost" id="editMoveBtn" type="button">Edit</button>
+        <button class="btn primary" id="updateMoveBtn" type="button">Update</button>
+      </div>
     </div>
   </div>
 
   <div class="card" id="proteinCard">
     <div class="row">
       <div>
-        <p class="muted">Protein remaining</p>
+        <p class="muted">Protein left</p>
         <p class="big" id="proteinLeft">140 g</p>
       </div>
       <div style="text-align:right">
         <p class="muted">Eaten</p>
-        <p class="big" id="proteinEaten" style="font-size:22px">0</p>
+        <p class="big" id="proteinEaten">0</p>
       </div>
     </div>
     <div class="bar"><i id="proteinBarFill"></i></div>
-    <p class="tiny" style="margin-top:8px" id="proteinGoals">Daily protein max 140g. Setup height &amp; weight still shows RDA / Active tips.</p>
   </div>
 
   <div class="card" id="modeCard">
     <div class="row">
       <div>
-        <p class="muted">Energy mode</p>
-        <p class="big" id="modeLabel" style="font-size:24px">Set Move</p>
+        <p class="muted">Mode</p>
+        <p class="big" id="modeLabel">Set Move</p>
       </div>
       <div style="text-align:right">
         <p class="muted">Net</p>
-        <p class="big" id="modeNet" style="font-size:22px">—</p>
+        <p class="big" id="modeNet">—</p>
       </div>
     </div>
-    <p class="tiny" style="margin-top:8px" id="modeDetail">Uses food vs estimated burn (BMR + Move). Burning = deficit. Bulking = surplus while moving a lot. Fattening = surplus with little Move.</p>
+    <div class="bar"><i id="modeBarFill"></i></div>
   </div>
 
   <div class="card">
-    <p class="eyebrow">Chat log</p>
-    <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed"></textarea>
-    <button class="btn primary" id="logBtn" type="button">Parse &amp; confirm</button>
-    <div class="chips" id="quick" style="margin-top:10px"></div>
-    <p class="tiny" style="margin-top:8px" id="chatHint">With a Gemini key in Setup, chat estimates any meal from your sentence (kcal + macros) — not a fixed food list. Always confirm before save.</p>
+    <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed" style="min-height:56px;margin:0"></textarea>
+    <button class="btn primary" id="logBtn" type="button" style="margin-top:6px">Parse &amp; confirm</button>
+    <div class="chips" id="quick" style="margin-top:6px"></div>
+    <p class="tiny hide" id="chatHint"></p>
   </div>
 
   <div class="card">
-    <div class="row"><b>Today’s meals</b><span class="muted" id="count">0</span></div>
+    <div class="row"><b>Meals</b><span class="muted" id="count">0</span></div>
     <div id="meals"></div>
   </div>
 </main>
@@ -1636,34 +1649,41 @@ textarea{resize:vertical;min-height:72px}
     const pct = Math.min(100, Math.round((e / BUDGET) * 100));
     document.getElementById("barFill").style.width = pct + "%";
     document.getElementById("budgetCard").classList.toggle("over", e > BUDGET);
-    document.getElementById("move").textContent = d.move ? d.move + " kcal" : "Not set";
+    document.getElementById("move").textContent = d.move ? (d.move + " kcal") : "—";
     const prot = eatenProtein(d);
     const pLeft = PROTEIN_GOAL - prot;
     const pLeftEl = document.getElementById("proteinLeft");
     const pEatenEl = document.getElementById("proteinEaten");
     const pBar = document.getElementById("proteinBarFill");
     const pCard = document.getElementById("proteinCard");
-    const pGoals = document.getElementById("proteinGoals");
     if (pLeftEl) pLeftEl.textContent = pLeft.toLocaleString() + " g";
     if (pEatenEl) pEatenEl.textContent = String(prot);
     if (pBar) pBar.style.width = Math.min(100, Math.round((prot / PROTEIN_GOAL) * 100)) + "%";
     if (pCard) pCard.classList.toggle("over", prot > PROTEIN_GOAL);
-    const body = bodyMetrics();
-    if (pGoals) {
-      if (body.rda != null && body.active != null) {
-        pGoals.textContent = "Max " + PROTEIN_GOAL + "g today · RDA " + body.rda + "g (0.8×kg) · Active " + body.active + "g (1.6×kg)" +
-          (body.bmi != null ? " · BMI " + body.bmi : "");
-      } else {
-        pGoals.textContent = "Daily protein max " + PROTEIN_GOAL + "g. Set height & weight in Setup for RDA / Active tips.";
-      }
-    }
     const mode = energyMode(e, d.move);
     const modeLabel = document.getElementById("modeLabel");
     const modeNet = document.getElementById("modeNet");
-    const modeDetail = document.getElementById("modeDetail");
+    const modeBar = document.getElementById("modeBarFill");
+    const modeCard = document.getElementById("modeCard");
     if (modeLabel) modeLabel.textContent = mode.label;
     if (modeNet) modeNet.textContent = mode.net == null ? "—" : ((mode.net > 0 ? "+" : "") + mode.net);
-    if (modeDetail) modeDetail.textContent = mode.detail;
+    if (modeCard) {
+      modeCard.classList.remove("mode-burn", "mode-bulk", "mode-fat", "mode-ok", "over");
+      if (mode.label === "Burning") modeCard.classList.add("mode-burn");
+      else if (mode.label === "Bulking") modeCard.classList.add("mode-bulk");
+      else if (mode.label === "Fattening") modeCard.classList.add("mode-fat");
+      else if (mode.label === "Maintain") modeCard.classList.add("mode-ok");
+    }
+    if (modeBar) {
+      // Map net deficit/surplus into a 0–100 bar (center-ish at maintain).
+      var pctMode = 50;
+      if (mode.net != null) {
+        pctMode = Math.max(0, Math.min(100, Math.round(50 + (mode.net / 10))));
+      } else {
+        pctMode = 0;
+      }
+      modeBar.style.width = pctMode + "%";
+    }
     document.getElementById("count").textContent = (d.meals || []).length;
     const list = document.getElementById("meals");
     if (!d.meals.length) {
