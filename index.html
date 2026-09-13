@@ -45,6 +45,8 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 .brand h1{margin:0;font-size:24px;letter-spacing:-0.03em}
 .eyebrow{margin:0;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase}
 .card{background:var(--card);border:1px solid #f0e7dd;border-radius:16px;padding:10px 12px;margin:6px 0;box-shadow:0 1px 0 #fff inset}
+.card.compact{padding:8px 10px;margin:5px 0;border-radius:14px}
+.card.compact .big{font-size:17px}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .big{font-size:20px;font-weight:750;margin:0;letter-spacing:-0.02em;line-height:1.15}
 .muted{color:var(--muted);margin:0;font-size:11px;line-height:1.25;font-weight:650}
@@ -125,11 +127,33 @@ button{border:0;background:none;color:inherit;cursor:pointer}
 .ghost{background:transparent;border:1px dashed var(--line);color:var(--muted)}
 .danger{background:#fff;border:1px solid #f0cfc6;color:#a33}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips.sm{gap:6px;margin-top:6px}
+.chips.sm .chip{padding:5px 10px;min-height:28px;font-size:12px;border-radius:999px}
 .chip{background:var(--soft);border-radius:999px;padding:10px 14px;min-height:44px;font-weight:650}
 .chip.on{background:var(--ink);color:#fff}
 .chip.ghost{background:#fff;border:1px solid var(--line)}
+.wo-list{margin-top:6px}
+.wo-list:empty{display:none}
+.wo-list .itemrow{padding:6px 0}
+.chat-card textarea{
+  width:100%;min-height:40px;margin:0;padding:10px 12px;font-size:15px;line-height:1.3;
+  border:1px solid var(--line);border-radius:12px;background:#fff;resize:none;
+}
+.chat-toolbar{display:flex;align-items:center;gap:6px;margin-top:6px}
+.chat-toolbar .filebtn{
+  width:auto;flex:0 0 auto;margin:0;min-height:36px;padding:0 12px;font-size:12px;border-radius:12px;
+}
+.chat-toolbar .btn.primary{
+  width:auto;flex:1;margin:0;min-height:36px;padding:0 14px;font-size:13px;border-radius:12px;
+}
+.chat-toolbar .chat-thumb-wrap{flex:0 0 auto}
+.chat-toolbar .chat-thumb{width:36px;height:36px;border-radius:9px}
+.chat-toolbar .chip.ghost{min-height:28px;padding:4px 8px;font-size:12px}
+.chat-photo-hint{margin:4px 0 0;font-size:11px;line-height:1.3;color:var(--muted)}
+.chat-photo-hint:empty,.chat-photo-hint.hide{display:none}
 textarea,input[type=text],input[type=number]{width:100%;border:1px solid var(--line);border-radius:14px;padding:12px;font-size:16px;background:#fff}
 textarea{resize:vertical;min-height:56px}
+.chat-card textarea{min-height:40px;padding:10px 12px;font-size:15px;border-radius:12px;resize:none}
 .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;padding:8px 12px env(safe-area-inset-bottom);background:#fffdf9ee;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);z-index:20}
 .tabs button{min-height:44px;min-width:64px;font-weight:700;color:var(--muted);font-size:13px}
 .tabs .on{color:var(--ink)}
@@ -156,11 +180,8 @@ textarea{resize:vertical;min-height:56px}
 .badge.label{background:#e8f3ee;color:var(--ok)}
 .filebtn{position:relative;overflow:hidden}
 .filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
-.chat-photo-row{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
-.chat-photo-row .filebtn{width:auto;flex:0 0 auto}
 .chat-thumb-wrap{display:flex;align-items:center;gap:6px}
 .chat-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:var(--soft)}
-.chat-photo-row .tiny{flex:1;min-width:120px}
 
 .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px}
@@ -207,7 +228,7 @@ textarea{resize:vertical;min-height:56px}
     </div>
   </div>
 
-  <div class="card" id="workoutCard">
+  <div class="card compact" id="workoutCard">
     <div class="row">
       <div style="min-width:0">
         <p class="muted">Workout</p>
@@ -216,14 +237,13 @@ textarea{resize:vertical;min-height:56px}
       <div class="compact-actions">
         <button class="chip ghost" id="workoutManualBtn" type="button">Extra</button>
         <label class="btn primary" id="workoutPhotoBtn" style="width:auto;margin:0;padding:6px 12px;min-height:32px;font-size:12px;border-radius:12px;display:inline-flex;align-items:center;cursor:pointer">
-          Add photo
+          Photo
           <input id="workoutPhotoInput" type="file" accept="image/*" class="hide" />
         </label>
       </div>
     </div>
-    <p class="tiny" style="margin-top:8px">Import a trainer plan photo → save as a set → tap when you did it. Extra kcal is only what Move likely missed (not a double count).</p>
-    <div class="chips" id="workoutSetChips" style="margin-top:8px"></div>
-    <div id="workoutTodayList" style="margin-top:8px"></div>
+    <div class="chips sm" id="workoutSetChips"></div>
+    <div class="wo-list" id="workoutTodayList"></div>
   </div>
 
   <div class="card" id="proteinCard">
@@ -250,19 +270,19 @@ textarea{resize:vertical;min-height:56px}
     </div>
   </div>
 
-  <div class="card">
-    <textarea id="text" rows="2" placeholder="Half a serving — then snap the label" style="min-height:56px;margin:0"></textarea>
-    <div class="chat-photo-row">
-      <button class="btn light filebtn" type="button" id="chatCamBtn">Label photo
+  <div class="card compact chat-card">
+    <textarea id="text" rows="1" placeholder="What you ate — or snap a label"></textarea>
+    <div class="chat-toolbar">
+      <button class="btn light filebtn" type="button" id="chatCamBtn" title="Label photo">Photo
         <input id="chatCam" type="file" accept="image/*" />
       </button>
       <div class="chat-thumb-wrap hide" id="chatPhotoWrap">
         <img class="chat-thumb" id="chatPhotoPreview" alt="Label preview" />
         <button type="button" class="chip ghost" id="chatPhotoClear" aria-label="Remove label photo">✕</button>
       </div>
-      <p class="tiny" id="chatPhotoHint">Optional: snap Nutrition Facts. Gemini uses your note + the label together.</p>
+      <button class="btn primary" id="logBtn" type="button">Parse</button>
     </div>
-    <button class="btn primary" id="logBtn" type="button" style="margin-top:8px">Parse with Gemini</button>
+    <p class="chat-photo-hint hide" id="chatPhotoHint"></p>
     <p class="tiny hide" id="chatHint"></p>
   </div>
 
@@ -737,7 +757,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v49 · Workout photos: week columns count as sets — Force refresh if sets still show as 1.";
+    if (ver) ver.textContent = "App build: v50 · Sleeker Workout + chat cards — Force refresh if cards still look tall.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -3015,7 +3035,7 @@ textarea{resize:vertical;min-height:56px}
     if (chips) {
       const sets = loadWorkoutSets();
       if (!sets.length) {
-        chips.innerHTML = '<span class="tiny">No saved sets yet — add a trainer plan photo.</span>';
+        chips.innerHTML = '<span class="tiny">No sets yet — use Photo.</span>';
       } else {
         chips.innerHTML = sets.slice(0, 12).map(function (s) {
           return '<button type="button" class="chip" data-set="' + s.id + '">' + escapeHtml(s.name) +
@@ -3246,7 +3266,7 @@ textarea{resize:vertical;min-height:56px}
     var wrap = document.getElementById("chatPhotoWrap");
     if (wrap) wrap.classList.add("hide");
     var hint = document.getElementById("chatPhotoHint");
-    if (hint) hint.textContent = "Optional: snap Nutrition Facts. Gemini uses your note + the label together.";
+    if (hint) { hint.textContent = ""; hint.classList.add("hide"); }
   }
 
   function applyChatPhotoDataUrl(dataUrl) {
@@ -3257,7 +3277,7 @@ textarea{resize:vertical;min-height:56px}
     var hint = document.getElementById("chatPhotoHint");
     if (preview) preview.src = chatPhotoData;
     if (wrap) wrap.classList.remove("hide");
-    if (hint) hint.textContent = "Label attached — type how much you ate (e.g. half), then Parse.";
+    if (hint) { hint.textContent = "Label ready — add portion, then Parse."; hint.classList.remove("hide"); }
     toast("Label photo ready");
     return true;
   }
@@ -3451,7 +3471,7 @@ textarea{resize:vertical;min-height:56px}
       });
     } finally {
       btn.disabled = false;
-      btn.textContent = "Parse with Gemini";
+      btn.textContent = "Parse";
     }
   };
 
