@@ -365,7 +365,8 @@ textarea{resize:vertical;min-height:72px}
           openShortcutIfEmpty: s.moveSleekV1 ? !!s.openShortcutIfEmpty : false,
           moveSleekV1: !!s.moveSleekV1,
           heightCm: s.heightCm != null && s.heightCm !== "" ? +s.heightCm : null,
-          weightKg: s.weightKg != null && s.weightKg !== "" ? +s.weightKg : null
+          weightKg: s.weightKg != null && s.weightKg !== "" ? +s.weightKg : null,
+          proteinBackfillV1: !!s.proteinBackfillV1
         };
       }
     } catch (e) {}
@@ -380,7 +381,8 @@ textarea{resize:vertical;min-height:72px}
       openShortcutIfEmpty: false,
       moveSleekV1: true,
       heightCm: null,
-      weightKg: null
+      weightKg: null,
+      proteinBackfillV1: false
     };
   }
 
@@ -410,7 +412,8 @@ textarea{resize:vertical;min-height:72px}
       openShortcutIfEmpty: s.openShortcutIfEmpty != null ? !!s.openShortcutIfEmpty : !!cur.openShortcutIfEmpty,
       moveSleekV1: s.moveSleekV1 != null ? !!s.moveSleekV1 : !!cur.moveSleekV1,
       heightCm: s.heightCm != null ? s.heightCm : (cur.heightCm != null ? cur.heightCm : null),
-      weightKg: s.weightKg != null ? s.weightKg : (cur.weightKg != null ? cur.weightKg : null)
+      weightKg: s.weightKg != null ? s.weightKg : (cur.weightKg != null ? cur.weightKg : null),
+      proteinBackfillV1: s.proteinBackfillV1 != null ? !!s.proteinBackfillV1 : !!cur.proteinBackfillV1
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
   }
@@ -1162,6 +1165,30 @@ textarea{resize:vertical;min-height:72px}
     }, 0));
   }
 
+  // One-time: write protein onto past meal items, then new meals store it at save time.
+  function backfillProteinOnce() {
+    const s = loadSettings();
+    if (s.proteinBackfillV1) return 0;
+    var changed = 0;
+    Object.keys((db && db.days) || {}).forEach(function (k) {
+      const dayObj = db.days[k];
+      if (!dayObj || !dayObj.meals) return;
+      dayObj.meals.forEach(function (meal) {
+        (meal.items || []).forEach(function (item, idx) {
+          if (item.protein != null && !isNaN(+item.protein)) return;
+          var p = estimateItemProtein(item);
+          if (!(p > 0)) return;
+          meal.items[idx] = withEstimatedProtein(item);
+          changed++;
+        });
+      });
+    });
+    s.proteinBackfillV1 = true;
+    saveSettings(s);
+    if (changed) saveAll(db);
+    return changed;
+  }
+
 
 
   function bodyMetrics() {
@@ -1208,6 +1235,8 @@ textarea{resize:vertical;min-height:72px}
   migrateAlternateStorageKeys();
   requestPersistentStorage();
   let db = loadAll();
+  var proteinFilled = 0;
+  try { proteinFilled = backfillProteinOnce(); } catch (e) { proteinFilled = 0; }
   let snapMode = "plate";
   let snapPhotoData = null;
   let selectedSnapFoods = {};
@@ -2033,6 +2062,7 @@ textarea{resize:vertical;min-height:72px}
         name: f.name,
         detail: "1 × " + f.name,
         kcal: f.kcal,
+        protein: f.protein != null ? f.protein : null,
         grade: "est",
         warn: "Plate photo estimate — not label-grade. Adjust if portions differ."
       };
@@ -2142,6 +2172,7 @@ textarea{resize:vertical;min-height:72px}
   renderSetupAi();
   renderToday();
   updateStorageBanner();
+  if (proteinFilled) toast("Protein filled for " + proteinFilled + " past food item(s)");
   if (!gotMove) maybeAutoFetchMove();
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") maybeAutoFetchMove();
