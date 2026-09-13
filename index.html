@@ -156,6 +156,12 @@ textarea{resize:vertical;min-height:56px}
 .badge.label{background:#e8f3ee;color:var(--ok)}
 .filebtn{position:relative;overflow:hidden}
 .filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.chat-photo-row{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.chat-photo-row .filebtn{width:auto;flex:0 0 auto}
+.chat-thumb-wrap{display:flex;align-items:center;gap:6px}
+.chat-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:var(--soft)}
+.chat-photo-row .tiny{flex:1;min-width:120px}
+
 .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px}
 .stat .big{font-size:22px}
@@ -245,8 +251,18 @@ textarea{resize:vertical;min-height:56px}
   </div>
 
   <div class="card">
-    <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed" style="min-height:56px;margin:0"></textarea>
-    <button class="btn primary" id="logBtn" type="button" style="margin-top:6px">Parse with Gemini</button>
+    <textarea id="text" rows="2" placeholder="Half a serving — then snap the label" style="min-height:56px;margin:0"></textarea>
+    <div class="chat-photo-row">
+      <button class="btn light filebtn" type="button" id="chatCamBtn">Label photo
+        <input id="chatCam" type="file" accept="image/*" capture="environment" />
+      </button>
+      <div class="chat-thumb-wrap hide" id="chatPhotoWrap">
+        <img class="chat-thumb" id="chatPhotoPreview" alt="Label preview" />
+        <button type="button" class="chip ghost" id="chatPhotoClear" aria-label="Remove label photo">✕</button>
+      </div>
+      <p class="tiny" id="chatPhotoHint">Optional: snap Nutrition Facts. Gemini uses your note + the label together.</p>
+    </div>
+    <button class="btn primary" id="logBtn" type="button" style="margin-top:8px">Parse with Gemini</button>
     <p class="tiny hide" id="chatHint"></p>
   </div>
 
@@ -721,7 +737,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v46 · Fixed Label prompt syntax (buttons work again) — Force refresh if still stuck.";
+    if (ver) ver.textContent = "App build: v47 · Today: note + label photo → one Gemini parse — Force refresh if Parse has no Label photo.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -1299,10 +1315,13 @@ textarea{resize:vertical;min-height:56px}
     }).filter(Boolean);
   }
 
-  function parseWithGemini(text) {
+  function parseWithGemini(text, imageDataUrl) {
     const s = loadSettings();
     if (!s.geminiKey || !s.useLlm) return Promise.resolve(null);
-    const cacheKey = mealCacheKey(text);
+    const hasImage = !!(imageDataUrl && String(imageDataUrl).indexOf("data:") === 0);
+    const note = String(text || "").replace(/\s+/g, " ").trim();
+    // Cache text-only parses. Label photos change every shot — never cache those.
+    const cacheKey = (!hasImage && note) ? mealCacheKey(note) : "";
     if (cacheKey && geminiParseCache[cacheKey]) {
       return Promise.resolve(geminiParseCache[cacheKey].map(function (it) {
         var out = {};
@@ -1310,23 +1329,51 @@ textarea{resize:vertical;min-height:56px}
         return out;
       }));
     }
-    // Same model fallback list as Test Gemini — Test can pass on model #2 while
-    // Parse used to fail forever on a dead saved model name.
     const modelsTry = [];
     const preferred = migrateGeminiModel(s.model || "gemini-3.5-flash");
     modelsTry.push(preferred);
     ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"].forEach(function (m) {
       if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
     });
-    const prompt =
-      "You are a nutrition estimator for a calorie tracker.\n" +
-      "The user typed a free-form meal or product. Estimate every edible yourself — do NOT use a fixed catalog.\n" +
-      "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
-      "CRITICAL: every object MUST include numeric protein in grams (0 only if truly none). Protein is as important as kcal.\n" +
-      "NAMING: name = the food/product itself (e.g. \"Hyde Pre-Workout\", \"Nonfat Greek Yogurt\"). detail = serving size and optional store only (e.g. \"1 serving · Costco\"). NEVER put serving/store alone in name — bad: \"1 serving from Costco\"; good name: \"Hyde Pre-Workout\", good detail: \"1 serving · Costco\".\n" +
-      "Include branded products, Costco items, pre-workout (e.g. Hyde), creatine, vitamins, and supplements. If a serving is ~0 kcal, still return it with kcal 0 and best-guess macros.\n" +
-      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (typical whey ~80% protein); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods or supplements.\n" +
-      "Meal: " + text;
+
+    var prompt;
+    if (hasImage) {
+      prompt =
+        "You are a nutrition estimator for a calorie tracker.\n" +
+        "The user attached a packaged-food Nutrition Facts / label PHOTO" +
+        (note ? (" and typed how much they ate: \"" + note + "\".") : " (no typed note — assume 1 serving from the label).") + "\n" +
+        "Read the label carefully. Apply the user's portion note to the label numbers " +
+        "(e.g. half / 1/2 / .5 = 0.5 serving; 2 servings = 2×; one bar/scoop = 1 serving unless label says otherwise).\n" +
+        "Return ONLY a JSON array of what they ATE (already portion-adjusted) with keys: " +
+        "name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
+        "CRITICAL: every object MUST include numeric protein in grams (0 only if truly none).\n" +
+        "NAMING: name = product from the label (brand + product). detail = portion eaten + label serving size " +
+        "(e.g. \"0.5 serving · 1 bar (40g)\"). NEVER put serving/store alone in name.\n" +
+        "kcal/protein/carbs/fat must be for the amount EATEN, not per-label-serving unless they ate exactly 1 serving.\n" +
+        "If the label is unreadable, still return best effort and set warn. No markdown.";
+    } else {
+      prompt =
+        "You are a nutrition estimator for a calorie tracker.\n" +
+        "The user typed a free-form meal or product. Estimate every edible yourself — do NOT use a fixed catalog.\n" +
+        "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
+        "CRITICAL: every object MUST include numeric protein in grams (0 only if truly none). Protein is as important as kcal.\n" +
+        "NAMING: name = the food/product itself (e.g. \"Hyde Pre-Workout\", \"Nonfat Greek Yogurt\"). detail = serving size and optional store only (e.g. \"1 serving · Costco\"). NEVER put serving/store alone in name — bad: \"1 serving from Costco\"; good name: \"Hyde Pre-Workout\", good detail: \"1 serving · Costco\".\n" +
+        "Include branded products, Costco items, pre-workout (e.g. Hyde), creatine, vitamins, and supplements. If a serving is ~0 kcal, still return it with kcal 0 and best-guess macros.\n" +
+        "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (typical whey ~80% protein); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods or supplements.\n" +
+        "Meal: " + note;
+    }
+
+    function buildParts() {
+      var parts = [{ text: prompt }];
+      if (hasImage) {
+        var pure = String(imageDataUrl);
+        var comma = pure.indexOf(",");
+        var b64 = comma >= 0 ? pure.slice(comma + 1) : pure;
+        var mime = (pure.match(/^data:([^;]+);/) || [])[1] || "image/jpeg";
+        parts.push({ inlineData: { mimeType: mime, data: b64 } });
+      }
+      return parts;
+    }
 
     function postGemini(modelName, generationConfig) {
       const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(modelName) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
@@ -1334,7 +1381,7 @@ textarea{resize:vertical;min-height:56px}
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          contents: [{ role: "user", parts: buildParts() }],
           generationConfig: generationConfig
         })
       }).then(function (res) {
@@ -1368,17 +1415,16 @@ textarea{resize:vertical;min-height:56px}
       }
       const rows = unwrapGeminiFoods(parsed);
       if (!rows) throw new Error("Gemini JSON was not a food list");
-      return mapGeminiFoodRows(rows, text);
+      return mapGeminiFoodRows(rows, note || "label photo");
     }
 
-    // Simple JSON config (no seed/topK). Try each model until one returns foods.
     function tryModel(i, lastErr) {
       if (i >= modelsTry.length) {
         return Promise.reject(new Error(lastErr || "Gemini returned no foods"));
       }
       const modelName = modelsTry[i];
       return postGemini(modelName, {
-        temperature: 0.2,
+        temperature: hasImage ? 0.1 : 0.2,
         responseMimeType: "application/json"
       }).then(function (data) {
         var items = itemsFromResponse(data);
@@ -1411,21 +1457,28 @@ textarea{resize:vertical;min-height:56px}
     });
   }
 
-  async function parseChatSmart(raw) {
+  async function parseChatSmart(raw, imageDataUrl) {
     const s = loadSettings();
+    const hasImage = !!(imageDataUrl && String(imageDataUrl).indexOf("data:") === 0);
     // LLM-first: when Gemini is configured, the model invents the meal list.
     // Do not silently fall back to the built-in catalog (that hides Gemini failures).
     if (s.geminiKey && s.useLlm) {
       try {
-        const llmItems = await parseWithGemini(raw);
+        const llmItems = await parseWithGemini(raw, imageDataUrl);
         if (llmItems && llmItems.length) {
-          return { items: applySaidProteinFromRaw(raw, llmItems), unknown: [], sourceNote: "gemini" };
+          return {
+            items: hasImage ? llmItems : applySaidProteinFromRaw(raw, llmItems),
+            unknown: [],
+            sourceNote: "gemini"
+          };
         }
         return {
           items: [],
           unknown: [String(raw || "").trim()].filter(Boolean),
           sourceNote: "gemini-empty",
-          llmError: "Gemini returned no foods."
+          llmError: hasImage
+            ? "Gemini could not read foods from that label photo."
+            : "Gemini returned no foods."
         };
       } catch (err) {
         return {
@@ -1435,6 +1488,16 @@ textarea{resize:vertical;min-height:56px}
           llmError: String(err.message || err)
         };
       }
+    }
+    if (hasImage) {
+      return {
+        items: [],
+        unknown: [],
+        sourceNote: "local",
+        llmError: !s.useLlm
+          ? "Gemini is off in Setup — label photos need AI."
+          : "Add a Gemini API key in Setup to parse label photos."
+      };
     }
     const local = parseChat(raw);
     return {
@@ -1932,6 +1995,7 @@ textarea{resize:vertical;min-height:56px}
   let db = loadAll();
   let snapMode = "plate";
   let snapPhotoData = null;
+  let chatPhotoData = null; // Today label photo (data URL) for text+image Parse
   let selectedSnapFoods = {};
   let labelDraft = null; // last Gemini label read { name, kcalPerServing, protein, carbs, fat, servingSize }
 
@@ -2421,7 +2485,9 @@ textarea{resize:vertical;min-height:56px}
       body += "<p class='tiny' style='margin:0 0 8px'>" +
         (opts.source === "snap-label"
           ? ("From nutrition label photo" + (missingP ? " (protein missing — check label)" : ""))
-          : ("Protein from Gemini" + (missingP ? " (some items missing P — re-parse if wrong)" : ""))) +
+          : (photo
+            ? ("From your note + label photo" + (missingP ? " (protein missing — check label)" : ""))
+            : ("Protein from Gemini" + (missingP ? " (some items missing P — re-parse if wrong)" : "")))) +
         "</p>";
     }
     if (photo) body += '<img src="' + photo + '" alt="" style="width:100%;border-radius:14px;margin:6px 0 10px;max-height:160px;object-fit:cover" />';
@@ -2473,6 +2539,7 @@ textarea{resize:vertical;min-height:56px}
       if (String(source).indexOf("chat") === 0) {
         var textEl = document.getElementById("text");
         if (textEl) textEl.value = "";
+        clearChatPhoto();
       }
       if (String(source).indexOf("snap") === 0) clearSnap();
       renderToday();
@@ -3136,6 +3203,62 @@ textarea{resize:vertical;min-height:56px}
     document.getElementById("sheetNo").onclick = closeSheet;
   }
 
+  function clearChatPhoto() {
+    chatPhotoData = null;
+    var cam = document.getElementById("chatCam");
+    if (cam) cam.value = "";
+    var img = document.getElementById("chatPhotoPreview");
+    if (img) img.removeAttribute("src");
+    var wrap = document.getElementById("chatPhotoWrap");
+    if (wrap) wrap.classList.add("hide");
+    var hint = document.getElementById("chatPhotoHint");
+    if (hint) hint.textContent = "Optional: snap Nutrition Facts. Gemini uses your note + the label together.";
+  }
+
+  function applyChatPhotoDataUrl(dataUrl) {
+    if (!dataUrl || String(dataUrl).indexOf("data:") !== 0) return false;
+    chatPhotoData = dataUrl;
+    var preview = document.getElementById("chatPhotoPreview");
+    var wrap = document.getElementById("chatPhotoWrap");
+    var hint = document.getElementById("chatPhotoHint");
+    if (preview) preview.src = chatPhotoData;
+    if (wrap) wrap.classList.remove("hide");
+    if (hint) hint.textContent = "Label attached — type how much you ate (e.g. half), then Parse.";
+    toast("Label photo ready");
+    return true;
+  }
+
+  function setChatPhotoFromFile(file) {
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var raw = reader.result;
+      var img = new Image();
+      img.onload = function () {
+        var max = 1280;
+        var w = img.width;
+        var h = img.height;
+        if (w > max || h > max) {
+          var s = Math.min(max / w, max / h);
+          w = Math.round(w * s);
+          h = Math.round(h * s);
+        }
+        var canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        applyChatPhotoDataUrl(canvas.toDataURL("image/jpeg", 0.75));
+      };
+      img.onerror = function () {
+        // Still attach the raw data URL so Parse can try the label as-is.
+        if (!applyChatPhotoDataUrl(raw)) toast("Couldn’t load that photo");
+      };
+      img.src = raw;
+    };
+    reader.onerror = function () { toast("Couldn’t read that photo"); };
+    reader.readAsDataURL(file);
+  }
+
   function clearSnap() {
     snapPhotoData = null;
     selectedSnapFoods = {};
@@ -3239,11 +3362,23 @@ textarea{resize:vertical;min-height:56px}
     toast("Workout removed");
   };
 
+  document.getElementById("chatCam").onchange = function () {
+    const f = this.files && this.files[0];
+    this.value = "";
+    if (f) setChatPhotoFromFile(f);
+  };
+
+  document.getElementById("chatPhotoClear").onclick = function () {
+    clearChatPhoto();
+    toast("Label photo removed");
+  };
+
   document.getElementById("logBtn").onclick = async function () {
     const raw = document.getElementById("text").value;
     const btn = document.getElementById("logBtn");
-    if (!String(raw || "").trim()) {
-      toast("Type a meal first");
+    const hasPhoto = !!chatPhotoData;
+    if (!String(raw || "").trim() && !hasPhoto) {
+      toast("Type what you ate and/or snap a label photo");
       return;
     }
     // Parse always goes through Gemini: health-check first so a dead key never
@@ -3265,8 +3400,8 @@ textarea{resize:vertical;min-height:56px}
         toast("Gemini not working — fix key in Setup before parsing. " + (health.error || ""));
         return;
       }
-      btn.textContent = "Asking Gemini…";
-      const parsed = await parseChatSmart(raw);
+      btn.textContent = hasPhoto ? "Reading label…" : "Asking Gemini…";
+      const parsed = await parseChatSmart(raw, chatPhotoData);
       const fromGemini = parsed.sourceNote === "gemini";
       if (!fromGemini || !(parsed.items && parsed.items.length)) {
         toast(parsed.llmError || "Gemini did not return foods — not opening confirm.");
@@ -3277,7 +3412,8 @@ textarea{resize:vertical;min-height:56px}
       confirmMeal({
         items: parsed.items,
         unknown: parsed.unknown,
-        source: "chat-ai"
+        source: "chat-ai",
+        photo: chatPhotoData || null
       });
     } finally {
       btn.disabled = false;
