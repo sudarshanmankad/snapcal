@@ -248,8 +248,8 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny" style="margin-top:8px">Chrome ≠ Safari (separate storage). To move meals: Chrome → Setup → Copy full backup → Safari → Setup → Restore. Then Add to Home Screen from Safari at …/snapcal/ (with the slash). Always use that Home Screen icon afterward.</p>
   </div>
   <div class="card">
-    <p class="eyebrow">Fitness Move (Home Screen app)</p>
-    <p class="muted"><b>Important:</b> Chrome and your Home Screen SnapCal icon do <b>not</b> share data. If the Shortcut uses <b>Open URLs</b>, iPhone opens Chrome and updates Move there — the Home Screen app stays old. Fix: <b>delete Open URLs</b> from the Shortcut.</p>
+    <p class="eyebrow">Fitness Move (clipboard only)</p>
+    <p class="muted"><b>Update never opens Shortcuts.</b> Automations copy Active Energy to the clipboard; SnapCal only <b>reads the clipboard</b> when you open the Home Screen app or tap Update — so you stay in SnapCal.</p>
     <p class="oknote" style="margin-top:10px"><b>Shortcut (once):</b><br/>
       1) Find Health Samples → Active Energy → today → Fill Missing <b>OFF</b><br/>
       2) Calculate Statistics → <b>Sum</b><br/>
@@ -257,14 +257,16 @@ textarea{resize:vertical;min-height:72px}
       4) <b>Copy to Clipboard</b> → Rounded Number<br/>
       5) <b>Do not</b> add Open URLs<br/>
       6) Name exactly <b>SnapCal Move</b><br/><br/>
-      Tap <b>Update</b> from the <b>Home Screen</b> icon → reads clipboard (or runs Shortcut if empty). If iPhone asks Paste once, tap Allow.<br/><br/><b>Automation (refresh clipboard):</b> Shortcuts → Automation → + → Time of Day → pick times → Run Shortcut → SnapCal Move → Ask Before Running <b>OFF</b>. Apple has no “every hour” — add one automation per time (e.g. 8:00, 12:00, 16:00, 20:00). Same Shortcut: Copy only, no Open URLs. Phone unlocked.</p>
-    <label class="tiny" style="display:block;margin-top:10px">Shortcut name (must match exactly)</label>
+      <b>Automation:</b> Shortcuts → Automation → + → Time of Day → Run Shortcut → SnapCal Move → Ask Before Running <b>OFF</b>. Add one per time (e.g. 8:00, 12:00, 16:00, 20:00). Phone unlocked.<br/><br/>
+      Open Home Screen SnapCal (or tap Update) → Allow Paste if asked → Move updates. No Shortcuts jump.</p>
+    <label class="tiny" style="display:block;margin-top:10px">Shortcut name (for rare manual run only)</label>
     <input type="text" id="shortcutName" value="SnapCal Move" />
     <button class="btn primary" id="saveMoveAutoBtn" type="button">Save shortcut name</button>
-    <button class="btn light" id="updateMoveSetupBtn" type="button">Update Move</button>
+    <button class="btn light" id="updateMoveSetupBtn" type="button">Update Move from clipboard</button>
+    <button class="btn light" id="runShortcutSetupBtn" type="button">Run Shortcut in Shortcuts app</button>
     <button class="btn light" id="copyShortcutStepsBtn" type="button">Copy Shortcut recipe</button>
     <p class="tiny" style="margin-top:8px" id="moveAutoStatus"></p>
-    <p class="tiny" style="margin-top:8px">Always use the Home Screen SnapCal icon for Update — not a Chrome tab.</p>
+    <p class="tiny" style="margin-top:8px">Always use the Home Screen SnapCal icon — not a Chrome tab.</p>
   </div>
   <button class="btn danger" id="clearToday" type="button">Clear today only</button>
   <button class="btn light" id="exportBtn" type="button">Copy today’s JSON</button>
@@ -1212,7 +1214,7 @@ textarea{resize:vertical;min-height:72px}
   function applyClipboardMoveText(text, quiet) {
     const n = parseMovePayload(text);
     if (n == null) {
-      if (!quiet) toast("Clipboard has no Move yet. Run your Shortcut that copies Active Energy, then tap Update.");
+      if (!quiet) toast("No Move on clipboard yet — wait for Automation, or run SnapCal Move once from Shortcuts.");
       return false;
     }
     return setMoveKcal(n, "clipboard", { quietSame: !!quiet });
@@ -1234,31 +1236,21 @@ textarea{resize:vertical;min-height:72px}
   function maybeAutoFetchMove() {
     if (applyMoveQuery()) return;
 
-    var pending = false;
-    try { pending = sessionStorage.getItem("snapcal-pending-move") === "1"; } catch (e) {}
-
     const s = loadSettings();
+    if (!s.autoMove) return;
+    if (s.lastAutoMoveAt && Date.now() - s.lastAutoMoveAt < 45 * 1000) return;
 
-    // Hourly Automation left Active Energy on the clipboard — apply quietly on open.
-    if (!pending) {
-      if (!s.autoMove) return;
-      if (s.lastAutoMoveAt && Date.now() - s.lastAutoMoveAt < 45 * 1000) return;
-      tryClipboardMove(true);
-      return;
-    }
-
-    // Returned from Update → Shortcuts — apply clipboard here (Home Screen storage).
+    // Spec: opening / returning to the app reads clipboard (Automations keep it fresh).
+    // Never open Shortcuts from here.
     function attempt(pass) {
-      tryClipboardMove(pass > 0 ? false : true).then(function (ok) {
+      tryClipboardMove(true).then(function (ok) {
         if (ok) {
           try { sessionStorage.removeItem("snapcal-pending-move"); } catch (e) {}
           return;
         }
         if (pass < 2) {
-          setTimeout(function () { attempt(pass + 1); }, 500);
-          return;
+          setTimeout(function () { attempt(pass + 1); }, 400);
         }
-        toast("Tap Allow Paste if asked — or Edit Move. Delete Open URLs from the Shortcut so you return here.");
       });
     }
     attempt(0);
@@ -1266,28 +1258,28 @@ textarea{resize:vertical;min-height:72px}
 
   function shortcutRecipeText() {
     return [
-      "SnapCal Move — updates the Home Screen app (not Chrome)",
+      "SnapCal Move — clipboard only (no Open URLs, no Update→Shortcuts jump)",
       "",
-      "Why Chrome looked updated: Open URLs opens your default browser (Chrome).",
-      "Chrome and the Home Screen SnapCal icon store data separately.",
+      "SnapCal never opens Shortcuts when you tap Update.",
+      "Automations copy Active Energy; SnapCal reads the clipboard on open / Update.",
       "",
-      "Build this Shortcut:",
+      "Build Shortcut:",
       "1. Shortcuts → + → name exactly: SnapCal Move",
       "2. Find Health Samples → Active Energy → start of today → Fill Missing OFF",
       "3. Calculate Statistics → Sum",
       "4. Round Number → Sum → Integer",
       "5. Copy to Clipboard → Rounded Number",
-      "6. Do NOT add Open URLs (delete it if you already added it)",
+      "6. Do NOT add Open URLs",
       "7. Save",
       "",
-      "Use: Home Screen SnapCal → Update (reads clipboard, or runs Shortcut if empty).",
-      "If iPhone asks Paste once, tap Allow.",
-      "",
-      "Automation (keep clipboard fresh):",
+      "Automation:",
       "Shortcuts → Automation → + → Time of Day → Daily",
       "Run Shortcut → SnapCal Move → Ask Before Running OFF",
       "Add one automation per clock time (Apple has no every-hour).",
-      "Phone must be unlocked for Health to copy."
+      "Phone must be unlocked.",
+      "",
+      "Use: open Home Screen SnapCal (or tap Update). Allow Paste if asked.",
+      "Rare: Setup → Run Shortcut in Shortcuts app (manual Health pull)."
     ].join("\n");
   }
 
@@ -1717,19 +1709,27 @@ textarea{resize:vertical;min-height:72px}
   };
 
   function onUpdateMove() {
-    // Clipboard first (Automation may have already copied Move). If empty, run Shortcut.
+    // Clipboard only — never open Shortcuts (that leaves the Home Screen app).
     if (!isStandaloneApp()) {
       toast("Open SnapCal from the Home Screen icon first — Chrome won’t keep your Move.");
     }
     tryClipboardMove(false).then(function (ok) {
       if (ok) return;
-      fetchMoveViaShortcut("manual");
+      toast("No Move on clipboard yet — wait for Automation, or use Setup → Run Shortcut in Shortcuts app.");
     });
   }
   var updToday = document.getElementById("updateMoveBtn");
   var updSetup = document.getElementById("updateMoveSetupBtn");
   if (updToday) updToday.onclick = onUpdateMove;
   if (updSetup) updSetup.onclick = onUpdateMove;
+
+  var runSc = document.getElementById("runShortcutSetupBtn");
+  if (runSc) {
+    runSc.onclick = function () {
+      toast("Opening Shortcuts for a manual Health copy — return to SnapCal after it finishes");
+      fetchMoveViaShortcut("manual");
+    };
+  }
 
   document.getElementById("copyShortcutStepsBtn").onclick = function () {
     const text = shortcutRecipeText();
