@@ -135,11 +135,33 @@ textarea{resize:vertical;min-height:72px}
     </div>
   </div>
 
-  <div class="card" id="macroCard">
-    <p class="eyebrow" style="margin:0 0 8px">Protein &amp; energy mode</p>
-    <p class="big" id="proteinLine" style="font-size:18px;margin:0">Protein 0g</p>
-    <p class="tiny" id="proteinGoals" style="margin-top:6px">Set height &amp; weight in Setup for goals (0.8 &amp; 1.6 g/kg).</p>
-    <p class="tiny" id="netLine" style="margin-top:8px">Net — · Set Move to see Deficit / Maintain / Surplus</p>
+  <div class="card" id="proteinCard">
+    <div class="row">
+      <div>
+        <p class="muted">Protein remaining</p>
+        <p class="big" id="proteinLeft">140 g</p>
+      </div>
+      <div style="text-align:right">
+        <p class="muted">Eaten</p>
+        <p class="big" id="proteinEaten" style="font-size:22px">0</p>
+      </div>
+    </div>
+    <div class="bar"><i id="proteinBarFill"></i></div>
+    <p class="tiny" style="margin-top:8px" id="proteinGoals">Daily protein max 140g. Setup height &amp; weight still shows RDA / Active tips.</p>
+  </div>
+
+  <div class="card" id="modeCard">
+    <div class="row">
+      <div>
+        <p class="muted">Energy mode</p>
+        <p class="big" id="modeLabel" style="font-size:24px">Set Move</p>
+      </div>
+      <div style="text-align:right">
+        <p class="muted">Net</p>
+        <p class="big" id="modeNet" style="font-size:22px">—</p>
+      </div>
+    </div>
+    <p class="tiny" style="margin-top:8px" id="modeDetail">Burning = Move &gt; food. Bulking = eating more + burning more. Fattening = eating more than you burned.</p>
   </div>
 
   <div class="card">
@@ -303,6 +325,7 @@ textarea{resize:vertical;min-height:72px}
 <script>
 (function () {
   const BUDGET = 1800;
+  const PROTEIN_GOAL = 140;
   // --- On-device storage (PERMANENT keys — do not rename; app updates must not wipe user data) ---
   const SCHEMA = 2;
   const KEY = "snapcal-v1";                 // meals + history by day
@@ -1330,14 +1353,45 @@ textarea{resize:vertical;min-height:72px}
 
   function energyMode(intake, move) {
     if (move == null || !(+move > 0)) {
-      return { net: null, label: "Set Move", detail: "Net needs Fitness Move" };
+      return { net: null, label: "Set Move", detail: "Need Fitness Move to judge Burning / Bulking / Fattening" };
     }
-    const net = Math.round(+intake - +move);
-    var label = "Maintain";
-    if (net <= -200) label = "Deficit";
-    else if (net >= 200) label = "Surplus";
+    const food = Math.round(+intake);
+    const burn = Math.round(+move);
+    const net = food - burn; // + = eating more than burned
     const sign = net > 0 ? ("+" + net) : String(net);
-    return { net: net, label: label, detail: "Net " + sign + " kcal (food − Move) · " + label };
+
+    // Burning: burned more than you ate (deficit)
+    if (net <= -200) {
+      return {
+        net: net,
+        label: "Burning",
+        detail: "Move " + burn + " > food " + food + " · net " + sign + " kcal · based on Move, not full TDEE"
+      };
+    }
+    // Near balance
+    if (net < 200) {
+      return {
+        net: net,
+        label: "Maintain",
+        detail: "Food ≈ Move · net " + sign + " kcal · based on Move, not full TDEE"
+      };
+    }
+    // Surplus: eating more than burned
+    // Bulking = also burning a lot (active surplus). Fattening = little burn vs food.
+    const highBurn = burn >= 400;
+    const highEat = food >= BUDGET;
+    if (highBurn && highEat) {
+      return {
+        net: net,
+        label: "Bulking",
+        detail: "Eating more + burning more · net " + sign + " kcal · based on Move, not full TDEE"
+      };
+    }
+    return {
+      net: net,
+      label: "Fattening",
+      detail: "Eating more than you burned · net " + sign + " kcal · based on Move, not full TDEE"
+    };
   }
 
   function mealTotal(m) {
@@ -1545,23 +1599,32 @@ textarea{resize:vertical;min-height:72px}
     document.getElementById("budgetCard").classList.toggle("over", e > BUDGET);
     document.getElementById("move").textContent = d.move ? d.move + " kcal" : "Not set";
     const prot = eatenProtein(d);
-    const body = bodyMetrics();
-    const pLine = document.getElementById("proteinLine");
+    const pLeft = PROTEIN_GOAL - prot;
+    const pLeftEl = document.getElementById("proteinLeft");
+    const pEatenEl = document.getElementById("proteinEaten");
+    const pBar = document.getElementById("proteinBarFill");
+    const pCard = document.getElementById("proteinCard");
     const pGoals = document.getElementById("proteinGoals");
-    const nLine = document.getElementById("netLine");
-    if (pLine) pLine.textContent = "Protein " + prot + "g";
+    if (pLeftEl) pLeftEl.textContent = pLeft.toLocaleString() + " g";
+    if (pEatenEl) pEatenEl.textContent = String(prot);
+    if (pBar) pBar.style.width = Math.min(100, Math.round((prot / PROTEIN_GOAL) * 100)) + "%";
+    if (pCard) pCard.classList.toggle("over", prot > PROTEIN_GOAL);
+    const body = bodyMetrics();
     if (pGoals) {
       if (body.rda != null && body.active != null) {
-        pGoals.textContent = "Goals · RDA " + body.rda + "g (0.8×kg) · Active " + body.active + "g (1.6×kg)" +
+        pGoals.textContent = "Max " + PROTEIN_GOAL + "g today · RDA " + body.rda + "g (0.8×kg) · Active " + body.active + "g (1.6×kg)" +
           (body.bmi != null ? " · BMI " + body.bmi : "");
       } else {
-        pGoals.textContent = "Set height & weight in Setup for goals (0.8 & 1.6 g/kg).";
+        pGoals.textContent = "Daily protein max " + PROTEIN_GOAL + "g. Set height & weight in Setup for RDA / Active tips.";
       }
     }
-    if (nLine) {
-      const mode = energyMode(e, d.move);
-      nLine.textContent = mode.detail + " · based on Move, not full TDEE";
-    }
+    const mode = energyMode(e, d.move);
+    const modeLabel = document.getElementById("modeLabel");
+    const modeNet = document.getElementById("modeNet");
+    const modeDetail = document.getElementById("modeDetail");
+    if (modeLabel) modeLabel.textContent = mode.label;
+    if (modeNet) modeNet.textContent = mode.net == null ? "—" : ((mode.net > 0 ? "+" : "") + mode.net);
+    if (modeDetail) modeDetail.textContent = mode.detail;
     document.getElementById("count").textContent = (d.meals || []).length;
     const list = document.getElementById("meals");
     if (!d.meals.length) {
