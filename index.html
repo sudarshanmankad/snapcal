@@ -310,37 +310,37 @@ textarea{resize:vertical;min-height:72px}
   const MYFOODS_KEY = "snapcal-my-foods";   // personal food dictionary
   const LEGACY_DAY_KEYS = ["snapcal-onefile", "snapcal-v0"];
   const FOODS = [
-    { id: "idli", name: "Idli", kcal: 70, perG: null, unit: "piece", aliases: ["idly"] },
-    { id: "dosa", name: "Dosa", kcal: 120, perG: null, unit: "piece", aliases: [] },
-    { id: "roti", name: "Roti", kcal: 80, perG: null, unit: "piece", aliases: ["chapati", "chapathi"] },
-    { id: "paratha", name: "Paratha", kcal: 180, perG: null, unit: "piece", aliases: [] },
-    { id: "dal", name: "Dal", kcal: 200, perG: 1.0, unit: "bowl", aliases: ["daal", "dal tadka"] },
-    { id: "rice", name: "Rice (cooked)", kcal: 130, perG: 1.3, unit: "serving", aliases: ["white rice", "cooked rice", "steamed rice"], note: "cooked" },
-    { id: "rice-raw", name: "Rice (raw/uncooked)", kcal: 360, perG: 3.6, unit: "serving", aliases: ["raw rice", "uncooked rice"], note: "raw" },
-    { id: "chai", name: "Chai", kcal: 90, perG: null, unit: "cup", aliases: ["tea", "chai tea"] },
-    { id: "coffee", name: "Coffee w/ milk", kcal: 50, perG: null, unit: "cup", aliases: ["coffee"] },
-    { id: "cookie", name: "Cookie", kcal: 80, perG: null, unit: "piece", aliases: ["cookies", "biscuit", "biscuits"], warn: "Brand matters (Parle-G ≠ homemade)." },
-    { id: "eggs", name: "Egg", kcal: 70, perG: null, unit: "piece", aliases: ["eggs", "boiled egg"] },
-    { id: "banana", name: "Banana", kcal: 105, perG: null, unit: "piece", aliases: [] },
-    { id: "yogurt", name: "Yogurt / curd", kcal: 100, perG: 0.6, unit: "bowl", aliases: ["curd", "dahi", "yoghurt", "yogurt", "greek yogurt"] },
-    { id: "paneer", name: "Paneer", kcal: 265, perG: 2.65, unit: "serving", aliases: [] },
-    { id: "chicken", name: "Chicken", kcal: 165, perG: 1.65, unit: "serving", aliases: ["chicken breast"] },
-    { id: "salad", name: "Salad", kcal: 80, perG: null, unit: "bowl", aliases: [] },
-    { id: "samosa", name: "Samosa", kcal: 250, perG: null, unit: "piece", aliases: [] },
-    { id: "peanut", name: "Peanuts", kcal: 160, perG: 5.7, unit: "handful", aliases: ["peanut"] },
-    { id: "oats", name: "Oats", kcal: 380, perG: 3.8, unit: "serving", aliases: ["oatmeal", "rolled oats", "oat"] },
-    { id: "whey", name: "Whey protein", kcal: 120, perG: 4.0, unit: "scoop", aliases: ["protein whey", "whey protein", "protein powder", "whey powder", "protein"] },
-    { id: "chia", name: "Chia seeds", kcal: 50, perG: 4.86, unit: "serving", aliases: ["chia seed", "chia", "chia seeds"] },
-    { id: "almonds", name: "Almonds", kcal: 160, perG: 5.8, unit: "handful", aliases: ["almond"] },
-    { id: "milk", name: "Milk", kcal: 150, perG: 0.64, unit: "cup", aliases: ["whole milk"] },
-    { id: "chickpeas", name: "Chickpeas (cooked)", kcal: 160, perG: 1.64, unit: "serving", aliases: ["chickpea", "chana", "chole", "kabuli chana", "garbanzo", "garbanzo beans", "cooked chickpeas", "boiled chickpeas"] },
-    { id: "chickpeas-raw", name: "Chickpeas (raw/uncooked)", kcal: 364, perG: 3.64, unit: "serving", aliases: ["raw chickpeas", "uncooked chickpeas", "dry chickpeas", "dried chickpeas", "raw chana", "uncooked chana"] },
-    { id: "cantaloupe", name: "Cantaloupe", kcal: 34, perG: 0.34, unit: "serving", aliases: ["canteloupe", "muskmelon", "musk melon", "rockmelon", "melon"] },
-    { id: "onion", name: "Onion", kcal: 40, perG: 0.4, unit: "serving", aliases: ["onions"] },
-    { id: "broccoli", name: "Broccoli", kcal: 35, perG: 0.34, unit: "serving", aliases: ["brocoli"] },
-    { id: "french-beans", name: "French beans", kcal: 30, perG: 0.31, unit: "serving", aliases: ["french bean", "green beans", "green bean", "beans", "haricot verts"] },
-    { id: "yogurt-ff", name: "Fat-free yogurt", kcal: 55, perG: 0.55, unit: "cup", aliases: ["fat free yogurt", "fat-free yogurt", "nonfat yogurt", "non fat yogurt", "0% yogurt", "skim yogurt"] },
-    { id: "apple", name: "Apple", kcal: 95, perG: null, unit: "piece", aliases: [] }
+    { id: "idli", name: "Idli", kcal: 70, perG: null, protein: 2, proteinPerG: null, unit: "piece", aliases: ["idly"] },
+    { id: "dosa", name: "Dosa", kcal: 120, perG: null, protein: 3, proteinPerG: null, unit: "piece", aliases: [] },
+    { id: "roti", name: "Roti", kcal: 80, perG: null, protein: 3, proteinPerG: null, unit: "piece", aliases: ["chapati", "chapathi"] },
+    { id: "paratha", name: "Paratha", kcal: 180, perG: null, protein: 4, proteinPerG: null, unit: "piece", aliases: [] },
+    { id: "dal", name: "Dal", kcal: 200, perG: 1.0, protein: 12, proteinPerG: 0.06, unit: "bowl", aliases: ["daal", "dal tadka"] },
+    { id: "rice", name: "Rice (cooked)", kcal: 130, perG: 1.3, protein: 3, proteinPerG: 0.027, unit: "serving", aliases: ["white rice", "cooked rice", "steamed rice"], note: "cooked" },
+    { id: "rice-raw", name: "Rice (raw/uncooked)", kcal: 360, perG: 3.6, protein: 7, proteinPerG: 0.07, unit: "serving", aliases: ["raw rice", "uncooked rice"], note: "raw" },
+    { id: "chai", name: "Chai", kcal: 90, perG: null, protein: 2, proteinPerG: null, unit: "cup", aliases: ["tea", "chai tea"] },
+    { id: "coffee", name: "Coffee w/ milk", kcal: 50, perG: null, protein: 1, proteinPerG: null, unit: "cup", aliases: ["coffee"] },
+    { id: "cookie", name: "Cookie", kcal: 80, perG: null, protein: 1, proteinPerG: null, unit: "piece", aliases: ["cookies", "biscuit", "biscuits"], warn: "Brand matters (Parle-G ≠ homemade)." },
+    { id: "eggs", name: "Egg", kcal: 70, perG: null, protein: 6, proteinPerG: null, unit: "piece", aliases: ["eggs", "boiled egg"] },
+    { id: "banana", name: "Banana", kcal: 105, perG: null, protein: 1, proteinPerG: null, unit: "piece", aliases: [] },
+    { id: "yogurt", name: "Yogurt / curd", kcal: 100, perG: 0.6, protein: 5, proteinPerG: 0.05, unit: "bowl", aliases: ["curd", "dahi", "yoghurt", "yogurt", "greek yogurt"] },
+    { id: "paneer", name: "Paneer", kcal: 265, perG: 2.65, protein: 18, proteinPerG: 0.18, unit: "serving", aliases: [] },
+    { id: "chicken", name: "Chicken", kcal: 165, perG: 1.65, protein: 31, proteinPerG: 0.31, unit: "serving", aliases: ["chicken breast"] },
+    { id: "salad", name: "Salad", kcal: 80, perG: null, protein: 2, proteinPerG: null, unit: "bowl", aliases: [] },
+    { id: "samosa", name: "Samosa", kcal: 250, perG: null, protein: 5, proteinPerG: null, unit: "piece", aliases: [] },
+    { id: "peanut", name: "Peanuts", kcal: 160, perG: 5.7, protein: 7, proteinPerG: 0.26, unit: "handful", aliases: ["peanut"] },
+    { id: "oats", name: "Oats", kcal: 380, perG: 3.8, protein: 13, proteinPerG: 0.13, unit: "serving", aliases: ["oatmeal", "rolled oats", "oat"] },
+    { id: "whey", name: "Whey protein", kcal: 120, perG: 4.0, protein: 24, proteinPerG: 0.8, unit: "scoop", aliases: ["protein whey", "whey protein", "protein powder", "whey powder", "protein"] },
+    { id: "chia", name: "Chia seeds", kcal: 50, perG: 4.86, protein: 2, proteinPerG: 0.17, unit: "serving", aliases: ["chia seed", "chia", "chia seeds"] },
+    { id: "almonds", name: "Almonds", kcal: 160, perG: 5.8, protein: 6, proteinPerG: 0.21, unit: "handful", aliases: ["almond"] },
+    { id: "milk", name: "Milk", kcal: 150, perG: 0.64, protein: 8, proteinPerG: 0.034, unit: "cup", aliases: ["whole milk"] },
+    { id: "chickpeas", name: "Chickpeas (cooked)", kcal: 160, perG: 1.64, protein: 9, proteinPerG: 0.089, unit: "serving", aliases: ["chickpea", "chana", "chole", "kabuli chana", "garbanzo", "garbanzo beans", "cooked chickpeas", "boiled chickpeas"] },
+    { id: "chickpeas-raw", name: "Chickpeas (raw/uncooked)", kcal: 364, perG: 3.64, protein: 19, proteinPerG: 0.19, unit: "serving", aliases: ["raw chickpeas", "uncooked chickpeas", "dry chickpeas", "dried chickpeas", "raw chana", "uncooked chana"] },
+    { id: "cantaloupe", name: "Cantaloupe", kcal: 34, perG: 0.34, protein: 1, proteinPerG: 0.008, unit: "serving", aliases: ["canteloupe", "muskmelon", "musk melon", "rockmelon", "melon"] },
+    { id: "onion", name: "Onion", kcal: 40, perG: 0.4, protein: 1, proteinPerG: 0.011, unit: "serving", aliases: ["onions"] },
+    { id: "broccoli", name: "Broccoli", kcal: 35, perG: 0.34, protein: 3, proteinPerG: 0.028, unit: "serving", aliases: ["brocoli"] },
+    { id: "french-beans", name: "French beans", kcal: 30, perG: 0.31, protein: 2, proteinPerG: 0.018, unit: "serving", aliases: ["french bean", "green beans", "green bean", "beans", "haricot verts"] },
+    { id: "yogurt-ff", name: "Fat-free yogurt", kcal: 55, perG: 0.55, protein: 6, proteinPerG: 0.055, unit: "cup", aliases: ["fat free yogurt", "fat-free yogurt", "nonfat yogurt", "non fat yogurt", "0% yogurt", "skim yogurt"] },
+    { id: "apple", name: "Apple", kcal: 95, perG: null, protein: 0, proteinPerG: null, unit: "piece", aliases: [] }
   ];
 
   function migrateGeminiModel(model) {
@@ -970,11 +970,18 @@ textarea{resize:vertical;min-height:72px}
 
     function pushGrams(f, name, q, chunk, said) {
       if (!f && said.kcal == null) { unknown.push(chunk); return; }
+      function protFrom(food, grams) {
+        if (!food) return null;
+        if (grams != null && food.proteinPerG != null) return Math.round(food.proteinPerG * grams);
+        if (food.protein != null) return food.protein;
+        return null;
+      }
       if (said.kcal != null) {
         items.push({
           name: f ? f.name : name,
           detail: q + " g " + (f ? f.name : name) + " · you said " + said.kcal,
           kcal: said.kcal,
+          protein: protFrom(f, q),
           grade: "said",
           warn: "Using the calorie number you typed."
         });
@@ -986,6 +993,7 @@ textarea{resize:vertical;min-height:72px}
           name: f.name,
           detail: qShow2 + " g " + f.name + " (est.)",
           kcal: Math.round(f.kcal * (q / 100)),
+          protein: protFrom(f, q),
           grade: "est",
           warn: "No per-gram density — rough estimate from serving."
         });
@@ -996,6 +1004,7 @@ textarea{resize:vertical;min-height:72px}
         name: f.name,
         detail: qShow + " g " + f.name,
         kcal: Math.round(f.perG * q),
+        protein: protFrom(f, q),
         grade: "grams",
         warn: (function () {
           if (f.id === "rice" && !/\b(cooked|raw|uncooked)\b/i.test(chunk))
@@ -1105,6 +1114,7 @@ textarea{resize:vertical;min-height:72px}
         name: f.name,
         detail: "1 × " + f.name,
         kcal: f.kcal,
+        protein: f.protein != null ? f.protein : null,
         grade: "count",
         warn: f.warn || ""
       });
@@ -1118,14 +1128,41 @@ textarea{resize:vertical;min-height:72px}
     }, 0);
   }
 
+  function estimateItemProtein(item) {
+    if (!item) return 0;
+    if (item.protein != null && !isNaN(+item.protein)) return Math.max(0, +item.protein);
+    var f = null;
+    try { f = findFood(item.name || "") || findFood(String(item.detail || "")); } catch (e) { f = null; }
+    if (!f) return 0;
+    var detail = String(item.detail || "");
+    var gm = detail.match(/(\d+(?:\.\d+)?)\s*g\b/i);
+    if (gm && f.proteinPerG != null) return Math.round(f.proteinPerG * +gm[1]);
+    var mult = detail.match(/^(\d+(?:\.\d+)?)\s*[×x]/i);
+    var n = mult ? +mult[1] : 1;
+    if (f.protein != null) return Math.round(f.protein * n);
+    return 0;
+  }
+
+  function withEstimatedProtein(item) {
+    if (!item) return item;
+    if (item.protein != null && !isNaN(+item.protein)) return item;
+    var p = estimateItemProtein(item);
+    if (!(p > 0)) return item;
+    var out = {};
+    for (var k in item) if (Object.prototype.hasOwnProperty.call(item, k)) out[k] = item[k];
+    out.protein = p;
+    return out;
+  }
+
   function eatenProtein(d) {
     return Math.round((d.meals || []).reduce(function (s, m) {
       return s + (m.items || []).reduce(function (a, i) {
-        var p = i.protein;
-        return a + (p != null && !isNaN(+p) ? +p : 0);
+        return a + estimateItemProtein(i);
       }, 0);
     }, 0));
   }
+
+
 
   function bodyMetrics() {
     const s = loadSettings();
@@ -1388,6 +1425,10 @@ textarea{resize:vertical;min-height:72px}
           thumb +
           "<div><b>" + escapeHtml(m.items.map(function (i) { return i.detail; }).join(", ")) + "</b>" +
           '<div class="meta">' + formatTime(m.at) + " · " + (m.source || "log") +
+          (function () {
+            var mp = Math.round((m.items || []).reduce(function (a, i) { return a + estimateItemProtein(i); }, 0));
+            return mp ? (" · P " + mp + "g") : "";
+          })() +
           (m.items.some(function (i) { return i.grade === "est" || i.grade === "count"; }) ? " · estimate" : "") +
           "</div></div>" +
           '<div class="actions"><b>' + mealTotal(m) + '</b>' +
@@ -1441,13 +1482,14 @@ textarea{resize:vertical;min-height:72px}
   }
 
   function confirmMeal(opts) {
-    const items = opts.items || [];
+    const items = (opts.items || []).map(withEstimatedProtein);
     const unknown = opts.unknown || [];
     const source = opts.source || "chat";
     const photo = opts.photo || null;
     const tot = items.reduce(function (s, i) { return s + i.kcal; }, 0);
+    const protTot = Math.round(items.reduce(function (s, i) { return s + estimateItemProtein(i); }, 0));
     let body =
-      "<p class='eyebrow'>Confirm</p><h2 style='margin:4px 0 8px'>Save meal? " + tot + " kcal</h2>";
+      "<p class='eyebrow'>Confirm</p><h2 style='margin:4px 0 8px'>Save meal? " + tot + " kcal" + (protTot ? (" · P " + protTot + "g") : "") + "</h2>";
     if (photo) body += '<img src="' + photo + '" alt="" style="width:100%;border-radius:14px;margin:6px 0 10px;max-height:160px;object-fit:cover" />';
     items.forEach(function (i) {
       var macroBits = [];
@@ -1493,7 +1535,7 @@ textarea{resize:vertical;min-height:72px}
       if (source === "chat") document.getElementById("text").value = "";
       if (String(source).indexOf("snap") === 0) clearSnap();
       renderToday();
-      toast("Saved · " + tot + " kcal");
+      toast("Saved · " + tot + " kcal" + (protTot ? (" · P " + protTot + "g") : ""));
     };
     document.getElementById("sheetNo").onclick = closeSheet;
   }
@@ -1640,7 +1682,7 @@ textarea{resize:vertical;min-height:72px}
     if (!id) return;
     const f = FOODS.find(function (x) { return x.id === id; });
     confirmMeal({
-      items: [{ name: f.name, detail: "1 × " + f.name, kcal: f.kcal, grade: "count", warn: f.warn || "" }],
+      items: [{ name: f.name, detail: "1 × " + f.name, kcal: f.kcal, protein: f.protein != null ? f.protein : null, grade: "count", warn: f.warn || "" }],
       source: "chip"
     });
   };
