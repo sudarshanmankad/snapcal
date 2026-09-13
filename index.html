@@ -1138,27 +1138,25 @@ textarea{resize:vertical;min-height:56px}
 
   async function parseChatSmart(raw) {
     const s = loadSettings();
-    // LLM-first: when Gemini is configured, the model invents the meal list
-    // (no built-in catalog matching). Local parse is offline / no-key fallback only.
+    // LLM-first: when Gemini is configured, the model invents the meal list.
+    // Do not silently fall back to the built-in catalog (that hides Gemini failures).
     if (s.geminiKey && s.useLlm) {
       try {
         const llmItems = await parseWithGemini(raw);
         if (llmItems && llmItems.length) {
           return { items: applySaidProteinFromRaw(raw, llmItems), unknown: [], sourceNote: "gemini" };
         }
-        const localEmpty = parseChat(raw);
         return {
-          items: localEmpty.items,
-          unknown: localEmpty.unknown,
-          sourceNote: "local",
-          llmError: "Gemini returned no foods — fell back to built-in list."
+          items: [],
+          unknown: [String(raw || "").trim()].filter(Boolean),
+          sourceNote: "gemini-empty",
+          llmError: "Gemini returned no foods."
         };
       } catch (err) {
-        const localFail = parseChat(raw);
         return {
-          items: localFail.items,
-          unknown: localFail.unknown,
-          sourceNote: "local",
+          items: [],
+          unknown: [String(raw || "").trim()].filter(Boolean),
+          sourceNote: "gemini-error",
           llmError: String(err.message || err)
         };
       }
@@ -1172,6 +1170,87 @@ textarea{resize:vertical;min-height:56px}
         ? "Gemini is off in Setup — using built-in list only."
         : "Add a Gemini API key in Setup so chat can estimate any meal from your sentence."
     };
+  }
+
+  // Keep Setup form + stored key in sync (iOS often shows the password box empty).
+  function syncAiSettingsFromForm() {
+    var keyEl = document.getElementById("geminiKey");
+    var modelEl = document.getElementById("geminiModel");
+    var useEl = document.getElementById("useLlm");
+    var typed = keyEl ? keyEl.value.trim() : "";
+    var patch = {
+      model: modelEl && modelEl.value.trim() ? modelEl.value.trim() : "gemini-2.5-flash",
+      useLlm: useEl ? !!useEl.checked : true
+    };
+    if (typed) patch.geminiKey = typed;
+    saveSettings(patch);
+    renderSetupAi();
+    return loadSettings();
+  }
+
+  // Shared health check used by Setup → Test Gemini and by Parse & confirm.
+  // Returns { ok, model, reply, error }.
+  async function testGeminiHealth(opts) {
+    opts = opts || {};
+    const s = loadSettings();
+    const status = document.getElementById("aiTestStatus");
+    if (!s.geminiKey) {
+      const msg = "No Gemini key saved — paste one from Google AI Studio in Setup.";
+      if (status) status.textContent = msg;
+      return { ok: false, error: msg };
+    }
+    if (s.geminiKey.indexOf("AIza") !== 0 && status && !opts.quiet) {
+      status.textContent = "This key does not look like a Gemini API key (usually starts with AIza).";
+    }
+    const modelsTry = [];
+    const preferred = migrateGeminiModel(s.model || "gemini-2.5-flash");
+    modelsTry.push(preferred);
+    ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"].forEach(function (m) {
+      if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
+    });
+    let lastErr = null;
+    let okText = "";
+    let usedModel = preferred;
+    for (let i = 0; i < modelsTry.length; i++) {
+      usedModel = modelsTry[i];
+      if (status && !opts.quiet) status.textContent = "Calling " + usedModel + "…";
+      try {
+        const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(usedModel) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: "Reply with exactly: OK" }] }],
+            generationConfig: { temperature: 0, maxOutputTokens: 16 }
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          lastErr = (data && data.error && data.error.message) || ("HTTP " + res.status);
+          if (/API key|API_KEY|permission|403|401/i.test(lastErr)) break;
+          continue;
+        }
+        okText = ((((data.candidates || [])[0] || {}).content || {}).parts || [])
+          .map(function (p) { return p.text || ""; }).join("").trim();
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = String(err.message || err);
+      }
+    }
+    if (lastErr) {
+      if (status) status.textContent = "Gemini failed: " + lastErr + " — Use Show to verify key starts with AIza, then Save & Test again.";
+      return { ok: false, error: lastErr, model: usedModel };
+    }
+    if (usedModel !== s.model) {
+      saveSettings({ model: usedModel });
+      const modelEl = document.getElementById("geminiModel");
+      if (modelEl) modelEl.value = usedModel;
+    }
+    if (status) {
+      status.textContent = "Gemini working ✓ (" + usedModel + ")" + (okText ? (" — " + okText.slice(0, 40)) : "");
+    }
+    return { ok: true, model: usedModel, reply: okText };
   }
 
   function parseChat(raw) {
@@ -2259,28 +2338,38 @@ textarea{resize:vertical;min-height:56px}
   document.getElementById("logBtn").onclick = async function () {
     const raw = document.getElementById("text").value;
     const btn = document.getElementById("logBtn");
-    const s = loadSettings();
-    if (s.geminiKey && s.useLlm) {
-      btn.disabled = true;
-      btn.textContent = "Asking Gemini…";
-    } else {
-      toast("Tip: add a Gemini key in Setup so protein comes from AI for anything you type");
+    // Parse always goes through Gemini: health-check first so a dead key never
+    // silently falls back to the built-in catalog (0 kcal / “couldn’t match”).
+    const s = syncAiSettingsFromForm();
+    if (!s.useLlm) {
+      toast("Turn on “Use Gemini for chat” in Setup — Parse needs AI.");
+      return;
     }
+    if (!s.geminiKey) {
+      toast("Add a Gemini key in Setup, then Parse again.");
+      return;
+    }
+    btn.disabled = true;
     try {
+      btn.textContent = "Testing Gemini…";
+      const health = await testGeminiHealth({ quiet: true });
+      if (!health.ok) {
+        toast("Gemini not working — fix key in Setup before parsing. " + (health.error || ""));
+        return;
+      }
+      btn.textContent = "Asking Gemini…";
       const parsed = await parseChatSmart(raw);
-      if (parsed.llmError) toast(parsed.llmError);
-      if (parsed.unknown && parsed.unknown.length && (!parsed.items || !parsed.items.length)) {
-        toast("Couldn’t parse that. Add a Gemini key in Setup for free-form meals.");
+      const fromGemini = parsed.sourceNote === "gemini";
+      if (!fromGemini || !(parsed.items && parsed.items.length)) {
+        toast(parsed.llmError || "Gemini did not return foods — not opening confirm.");
+        return;
       }
-      const fromGemini = parsed.sourceNote && parsed.sourceNote.indexOf("gemini") >= 0;
-      if (fromGemini) {
-        const miss = (parsed.items || []).filter(function (i) { return i.protein == null || isNaN(+i.protein); });
-        if (miss.length) toast("Gemini missed protein on " + miss.length + " item(s) — check confirm sheet");
-      }
+      const miss = parsed.items.filter(function (i) { return i.protein == null || isNaN(+i.protein); });
+      if (miss.length) toast("Gemini missed protein on " + miss.length + " item(s) — check confirm sheet");
       confirmMeal({
         items: parsed.items,
         unknown: parsed.unknown,
-        source: fromGemini ? "chat-ai" : "chat"
+        source: "chat-ai"
       });
     } finally {
       btn.disabled = false;
@@ -2317,76 +2406,14 @@ textarea{resize:vertical;min-height:56px}
   };
 
   document.getElementById("testAiBtn").onclick = async function () {
-    // Save form first; blank key field keeps whatever is already stored.
-    var typed = document.getElementById("geminiKey").value.trim();
-    var patch = {
-      model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
-      useLlm: document.getElementById("useLlm").checked
-    };
-    if (typed) patch.geminiKey = typed;
-    saveSettings(patch);
-    renderSetupAi();
-    const s = loadSettings();
-    const status = document.getElementById("aiTestStatus");
+    syncAiSettingsFromForm();
     const btn = document.getElementById("testAiBtn");
-    if (!s.geminiKey) {
-      if (status) status.textContent = "No key saved — paste a key from Google AI Studio first.";
-      toast("Paste a Gemini key first");
-      return;
-    }
-    if (s.geminiKey.indexOf("AIza") !== 0) {
-      if (status) status.textContent = "This key does not look like a Gemini API key (usually starts with AIza). Re-copy from AI Studio.";
-    }
     btn.disabled = true;
     btn.textContent = "Testing…";
-    if (status) status.textContent = "Calling Gemini…";
     try {
-      const modelsTry = [];
-      const preferred = migrateGeminiModel(s.model || "gemini-2.5-flash");
-      modelsTry.push(preferred);
-      ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"].forEach(function (m) {
-        if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
-      });
-      let lastErr = null;
-      let okText = "";
-      let usedModel = preferred;
-      for (let i = 0; i < modelsTry.length; i++) {
-        usedModel = modelsTry[i];
-        if (status) status.textContent = "Calling " + usedModel + "…";
-        const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(usedModel) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: "Reply with exactly: OK" }] }],
-            generationConfig: { temperature: 0, maxOutputTokens: 16 }
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          lastErr = (data && data.error && data.error.message) || ("HTTP " + res.status);
-          // Invalid key — no point trying other models
-          if (/API key|API_KEY|permission|403|401/i.test(lastErr)) break;
-          continue;
-        }
-        okText = ((((data.candidates || [])[0] || {}).content || {}).parts || [])
-          .map(function (p) { return p.text || ""; }).join("").trim();
-        lastErr = null;
-        break;
-      }
-      if (lastErr) throw new Error(lastErr);
-      // Persist working model
-      if (usedModel !== s.model) {
-        saveSettings({ model: usedModel });
-        const modelEl = document.getElementById("geminiModel");
-        if (modelEl) modelEl.value = usedModel;
-      }
-      if (status) status.textContent = "Gemini working ✓ (" + usedModel + ")" + (okText ? (" — " + okText.slice(0, 40)) : "");
-      toast("Gemini is working");
-    } catch (err) {
-      const msg = String(err.message || err);
-      if (status) status.textContent = "Gemini failed: " + msg + " — Use Show to verify key starts with AIza, then Save & Test again.";
-      toast("Gemini failed — see status under Test");
+      const health = await testGeminiHealth({});
+      if (health.ok) toast("Gemini is working");
+      else toast("Gemini failed — see status under Test");
     } finally {
       btn.disabled = false;
       btn.textContent = "Test Gemini";
