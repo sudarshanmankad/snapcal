@@ -136,21 +136,39 @@ button{border:0;background:none;color:inherit;cursor:pointer}
 .wo-list:empty{display:none}
 .wo-list .itemrow{padding:6px 0}
 
-.wo-table-wrap{margin-top:8px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
-.wo-table{width:100%;border-collapse:collapse;font-size:12px}
-.wo-table th,.wo-table td{padding:6px 6px;border-bottom:1px solid #f0e6dc;text-align:left;vertical-align:middle}
-.wo-table th{background:#f7f2ec;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.04em;text-transform:uppercase}
-.wo-table tr:last-child td{border-bottom:0}
-.wo-table input{width:100%;border:0;background:transparent;padding:4px 2px;font-size:12px;border-radius:0;min-height:0}
-.wo-table input:focus{outline:none;background:#fff8f2}
-.wo-table .wo-col-name{width:42%}
-.wo-table .wo-col-wt{width:22%}
-.wo-table .wo-col-sets,.wo-table .wo-col-reps{width:14%;text-align:center}
-.wo-table .wo-col-sets input,.wo-table .wo-col-reps input{text-align:center}
-.wo-table .wo-col-del{width:8%;text-align:center;padding:0}
-.wo-table .wo-del{min-height:28px;padding:4px 6px;font-size:12px;color:var(--muted)}
-.wo-table-actions{display:flex;gap:8px;align-items:center;margin-top:6px}
-.wo-table-actions .chip{min-height:30px;padding:5px 10px;font-size:12px}
+.wo-ex-list{margin-top:8px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:visible}
+.wo-ex-card{padding:10px 10px 8px;border-bottom:1px solid #f0e6dc}
+.wo-ex-card:last-child{border-bottom:0}
+.wo-ex-card-top{display:flex;gap:8px;align-items:flex-start}
+.wo-ex-card .wo-ex-name{
+  flex:1;min-width:0;width:auto;margin:0;padding:6px 8px;font-size:14px;line-height:1.35;
+  font-weight:650;border:1px solid transparent;border-radius:10px;background:#faf7f3;
+  white-space:normal;overflow-wrap:anywhere;word-break:break-word;
+}
+.wo-ex-card .wo-ex-name:focus{outline:none;border-color:var(--line);background:#fff}
+.wo-ex-card .wo-del{flex:0 0 auto;min-height:32px;padding:4px 8px;font-size:12px;color:var(--muted);margin-top:2px}
+.wo-ex-meta{display:grid;grid-template-columns:minmax(0,1.5fr) 72px 72px;gap:8px;margin-top:8px}
+.wo-ex-field{min-width:0}
+.wo-ex-field label{display:block;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);margin:0 0 3px}
+.wo-ex-field input{
+  width:100%;margin:0;padding:7px 8px;font-size:13px;line-height:1.25;min-height:36px;
+  border:1px solid var(--line);border-radius:10px;background:#fff;
+  white-space:normal;overflow-wrap:anywhere;
+}
+.wo-ex-field input:focus{outline:none;border-color:#e8a070;background:#fffaf6}
+.wo-ex-field.wo-field-sets input,.wo-ex-field.wo-field-reps input{text-align:center;font-variant-numeric:tabular-nums}
+@media (max-width:380px){
+  .wo-ex-meta{grid-template-columns:1fr 1fr;gap:8px}
+  .wo-ex-field:first-child{grid-column:1 / -1}
+}
+.wo-ex-actions{display:flex;gap:8px;align-items:center;margin-top:8px}
+.wo-ex-actions .chip{min-height:30px;padding:5px 10px;font-size:12px}
+.wo-mini-list{margin-top:6px}
+.wo-mini-row{padding:8px 0;border-bottom:1px solid #f0e6dc}
+.wo-mini-row:last-child{border-bottom:0}
+.wo-mini-name{font-size:13px;font-weight:650;line-height:1.35;overflow-wrap:anywhere;word-break:break-word}
+.wo-mini-meta{margin-top:2px;font-size:11px;color:var(--muted);line-height:1.35;overflow-wrap:anywhere}
+#woNameInput{min-height:52px;resize:vertical;line-height:1.35;overflow-wrap:anywhere;word-break:break-word}
 .chat-card textarea{
   width:100%;min-height:40px;margin:0;padding:10px 12px;font-size:15px;line-height:1.3;
   border:1px solid var(--line);border-radius:12px;background:#fff;resize:none;
@@ -665,7 +683,7 @@ textarea{resize:vertical;min-height:56px}
       exercises: Array.isArray(set.exercises) ? set.exercises.map(function (ex) {
         return {
           name: String(ex.name || "Exercise").trim() || "Exercise",
-          detail: String(ex.detail || "").trim(),
+          detail: sanitizeWorkoutDetail(ex.detail || ""),
           sets: ex.sets != null && !isNaN(+ex.sets) ? Math.max(0, Math.round(+ex.sets)) : null,
           reps: ex.reps != null && !isNaN(+ex.reps) ? Math.max(0, Math.round(+ex.reps)) : null,
           durationMin: ex.durationMin != null && !isNaN(+ex.durationMin) ? Math.max(0, Math.round(+ex.durationMin)) : null
@@ -773,7 +791,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v52 · Workout plan table — Force refresh if Confirm plan still looks like a text dump.";
+    if (ver) ver.textContent = "App build: v53 · Workout plan cards — Force refresh if names still clip or weight progression is missing.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -2613,6 +2631,26 @@ textarea{resize:vertical;min-height:56px}
     };
   }
 
+  function sanitizeWorkoutDetail(detail) {
+    var d = String(detail || "").trim();
+    if (!d) return "";
+    d = d.replace(/[→➜➔➞➝➙]+/g, "→");
+    d = d.replace(/\s*(?:->|=>|—|–)\s*/g, "→");
+    d = d.replace(/\s*→\s*/g, "→");
+    d = d.replace(/[\s,;'"`]+$/g, "");
+    d = d.replace(/\s{2,}/g, " ");
+    return d.trim();
+  }
+
+  function shortenWorkoutTitle(name) {
+    var n = String(name || "").trim() || "Workout";
+    if (n.length <= 48) return n;
+    var cut = n.slice(0, 48);
+    var sp = cut.lastIndexOf(" ");
+    if (sp > 22) cut = cut.slice(0, sp);
+    return cut.replace(/[,.;:\-–—\s]+$/g, "") + "…";
+  }
+
   function parseWorkoutImage(dataUrl, userNote) {
     const s = loadSettings();
     if (!s.geminiKey || !s.useLlm) {
@@ -2632,13 +2670,20 @@ textarea{resize:vertical;min-height:56px}
     const noteBit = userNote ? ("\nUser note: " + String(userNote).trim() + "\n") : "";
     const prompt =
       "You read a handwritten or printed personal trainer workout plan photo.\n" +
-      "Return ONLY JSON (no markdown) with keys: name (short title for the set), kind (lifting|cardio|mixed), durationMin (number), estimateKcal (conservative total session burn), exercises (array of {name, detail, sets, reps, durationMin}), notes (short).\n" +
-      "Rules: be conservative on estimateKcal; strength sessions are usually 150–450 kcal for ~45–75 min; do not invent cardio-level burns for lifting; include every exercise you can read; sets/reps as numbers or null.\n" +
-      "CRITICAL sheet layout (common trainer log): columns labeled WEEK 1 / WEEK 2 / WEEK 3 / WEEK 4 (each with WT + REP) are often SET columns for one session — NOT four separate calendar weeks of history.\n" +
-      "For each exercise row: sets = how many week columns have a filled weight/reps entry; reps = the rep count written in those cells (e.g. '12x1' or '12' → reps 12); put the weight in detail (e.g. '95 lb').\n" +
-      "Example: Chest Supported Row with Week1–Week4 all filled as WT 95 REP 12x1 → {\"name\":\"Chest Supported Row\",\"detail\":\"95 lb\",\"sets\":4,\"reps\":12}.\n" +
-      "If only Week1–Week3 are filled → sets 3. Do NOT treat the trailing 'x1' after reps as the set count when week columns are filled — that 'x1' is usually just notation, not sets.\n" +
-      "If the sheet clearly is multi-week progress (different loads progressing across weeks for programming over a month) AND the user note says so, prefer the latest filled week and still set sets from how many set-slots that row uses in the active session; when unsure and week columns are identically filled, count filled week columns as sets.\n" +
+      "Return ONLY JSON (no markdown) with keys: name (short mobile-friendly title, max ~40 chars), kind (lifting|cardio|mixed), durationMin (number), estimateKcal (conservative total session burn), exercises (array of {name, detail, sets, reps, durationMin}), notes (short).\n" +
+      "Rules: be conservative on estimateKcal; strength sessions are usually 150–450 kcal for ~45–75 min; do not invent cardio-level burns for lifting; include EVERY exercise row you can read (do not drop progressing lifts); sets/reps as numbers or null; never put trailing commas/quotes junk in detail.\n" +
+      "CRITICAL sheet layout (common trainer log): columns labeled WEEK 1 / WEEK 2 / WEEK 3 / WEEK 4 (each with WT + REP) are usually SET columns for one session — NOT four separate calendar weeks of history.\n" +
+      "For each exercise row: sets = how many week columns have a filled weight/reps entry; reps = the common/last rep count (e.g. '12x1' or '12' → reps 12).\n" +
+      "WEIGHT / PROGRESSION in detail (required):\n" +
+      "- Same weight across filled columns → detail like \"95 lb\".\n" +
+      "- Weight changes across columns (increasing or decreasing) → keep the FULL progression with an arrow, e.g. \"100→90 lb\" or \"19→26 lb\". Do NOT collapse to one number; do NOT invent punctuation junk like \"19 lb,\".\n" +
+      "- If both weight AND reps change across columns → encode both in detail, e.g. \"100×12 → 90×10\", and set reps to the last filled rep count.\n" +
+      "Examples:\n" +
+      "- Chest Supported Row Week1–4 all WT 95 REP 12x1 → {\"name\":\"Chest Supported Row\",\"detail\":\"95 lb\",\"sets\":4,\"reps\":12}\n" +
+      "- Lat Pulldown Week columns 100 then 90 (reps 12) → {\"name\":\"Lat Pulldown (Front)\",\"detail\":\"100→90 lb\",\"sets\":2,\"reps\":12}\n" +
+      "- Lateral Raise 19 then 26 → {\"name\":\"Lateral Raise\",\"detail\":\"19→26 lb\",\"sets\":2,\"reps\":12}\n" +
+      "If only Week1–Week3 are filled → sets 3. Do NOT treat trailing 'x1' after reps as the set count when week columns are filled — that 'x1' is notation, not sets.\n" +
+      "When week columns are identically filled, count filled week columns as sets. Prefer readable exercise names (no truncation).\n" +
       meta + noteBit;
     const pure = String(dataUrl || "");
     const comma = pure.indexOf(",");
@@ -2688,16 +2733,18 @@ textarea{resize:vertical;min-height:56px}
         var fallback = localEstimateWorkout(parsed.name || userNote || "workout", kind);
         estimate = fallback.estimateKcal;
       }
-      var name = String(parsed.name || "").trim();
-      if (!name && userNote) name = String(userNote).trim().slice(0, 48);
+      var name = shortenWorkoutTitle(String(parsed.name || "").trim());
+      if (name === "Workout" && userNote) name = shortenWorkoutTitle(String(userNote).trim());
       if (!name) name = "Workout";
       var exercises = (Array.isArray(parsed.exercises) ? parsed.exercises : []).map(function (ex) {
         if (!ex || typeof ex !== "object") return null;
         var sets = ex.sets != null && !isNaN(+ex.sets) ? Math.max(0, Math.round(+ex.sets)) : null;
         var reps = ex.reps != null && !isNaN(+ex.reps) ? Math.max(0, Math.round(+ex.reps)) : null;
+        var detail = sanitizeWorkoutDetail(ex.detail || "");
         // If model stuffed "4x12" into detail/name and left sets null, recover sets×reps.
-        if (sets == null || reps == null) {
-          var blob = String(ex.detail || "") + " " + String(ex.name || "");
+        // Skip recovery when detail already looks like a weight progression (keeps 100→90 intact).
+        if ((sets == null || reps == null) && !/\d\s*→\s*\d/.test(detail)) {
+          var blob = detail + " " + String(ex.name || "");
           var xm = blob.match(/(\d+)\s*[x×]\s*(\d+)/i);
           if (xm) {
             // Prefer larger-first as sets when values look like sets×reps (e.g. 4x12);
@@ -2713,7 +2760,7 @@ textarea{resize:vertical;min-height:56px}
         }
         return {
           name: String(ex.name || "Exercise").trim() || "Exercise",
-          detail: String(ex.detail || "").trim(),
+          detail: detail,
           sets: sets,
           reps: reps,
           durationMin: ex.durationMin != null && !isNaN(+ex.durationMin) ? Math.max(0, Math.round(+ex.durationMin)) : null
@@ -2916,25 +2963,39 @@ textarea{resize:vertical;min-height:56px}
       ? draft.defaultExtraKcal
       : suggestedWorkoutExtra(draft.estimateKcal, draft.kind);
     const kind = draft.kind === "cardio" || draft.kind === "mixed" ? draft.kind : "lifting";
-    const rows = (draft.exercises || []).slice(0, 24);
+    const rows = (draft.exercises || []).slice(0, 24).map(function (ex) {
+      ex = ex || {};
+      return {
+        name: ex.name || "",
+        detail: sanitizeWorkoutDetail(ex.detail || ""),
+        sets: ex.sets,
+        reps: ex.reps
+      };
+    });
     function exerciseRowHtml(ex) {
       ex = ex || {};
       return (
-        '<tr class="wo-ex-row">' +
-        '<td class="wo-col-name"><input type="text" class="wo-ex-name" value="' + escapeHtml(ex.name || "") + '" placeholder="Exercise" /></td>' +
-        '<td class="wo-col-wt"><input type="text" class="wo-ex-detail" value="' + escapeHtml(ex.detail || "") + '" placeholder="95 lb" /></td>' +
-        '<td class="wo-col-sets"><input type="number" class="wo-ex-sets" inputmode="numeric" value="' + (ex.sets != null ? ex.sets : "") + '" placeholder="—" /></td>' +
-        '<td class="wo-col-reps"><input type="number" class="wo-ex-reps" inputmode="numeric" value="' + (ex.reps != null ? ex.reps : "") + '" placeholder="—" /></td>' +
-        '<td class="wo-col-del"><button type="button" class="chip ghost wo-del" aria-label="Remove row">✕</button></td>' +
-        "</tr>"
+        '<div class="wo-ex-card wo-ex-row">' +
+        '<div class="wo-ex-card-top">' +
+        '<input type="text" class="wo-ex-name" value="' + escapeHtml(ex.name || "") + '" placeholder="Exercise name" />' +
+        '<button type="button" class="chip ghost wo-del" aria-label="Remove exercise">✕</button>' +
+        "</div>" +
+        '<div class="wo-ex-meta">' +
+        '<div class="wo-ex-field"><label>Weight</label>' +
+        '<input type="text" class="wo-ex-detail" value="' + escapeHtml(ex.detail || "") + '" placeholder="95 lb or 100→90 lb" /></div>' +
+        '<div class="wo-ex-field wo-ex-sets"><label>Sets</label>' +
+        '<input type="number" class="wo-ex-sets" inputmode="numeric" value="' + (ex.sets != null ? ex.sets : "") + '" placeholder="—" /></div>' +
+        '<div class="wo-ex-field wo-ex-reps"><label>Reps</label>' +
+        '<input type="number" class="wo-ex-reps" inputmode="numeric" value="' + (ex.reps != null ? ex.reps : "") + '" placeholder="—" /></div>' +
+        "</div></div>"
       );
     }
-    const tableBody = (rows.length ? rows : [{}]).map(exerciseRowHtml).join("");
+    const listBody = (rows.length ? rows : [{}]).map(exerciseRowHtml).join("");
     openSheet(
       '<p class="eyebrow">Workout set</p>' +
       '<h2 style="margin:4px 0 8px">Confirm plan</h2>' +
       '<label class="tiny" style="display:block">Title</label>' +
-      '<input type="text" id="woNameInput" value="' + escapeHtml(draft.name || "Workout") + '" placeholder="e.g. Upper A / Hyde day" />' +
+      '<textarea id="woNameInput" rows="2">' + escapeHtml(draft.name || "Workout") + "</textarea>" +
       '<label class="tiny" style="display:block;margin-top:8px">Kind</label>' +
       '<select id="woKindSelect">' +
       '<option value="lifting"' + (kind === "lifting" ? " selected" : "") + '>Lifting</option>' +
@@ -2947,16 +3008,8 @@ textarea{resize:vertical;min-height:56px}
       '<label class="tiny" style="display:block;margin-top:8px">Optional note</label>' +
       '<input type="text" id="woNoteInput" value="' + escapeHtml(draft.notes || "") + '" placeholder="e.g. upper A, 55 min" />' +
       '<label class="tiny" style="display:block;margin-top:10px">Exercises</label>' +
-      '<div class="wo-table-wrap"><table class="wo-table" id="woExTable">' +
-      "<thead><tr>" +
-      '<th class="wo-col-name">Exercise</th>' +
-      '<th class="wo-col-wt">Weight</th>' +
-      '<th class="wo-col-sets">Sets</th>' +
-      '<th class="wo-col-reps">Reps</th>' +
-      '<th class="wo-col-del"></th>' +
-      "</tr></thead>" +
-      "<tbody id=\"woExBody\">" + tableBody + "</tbody></table></div>" +
-      '<div class="wo-table-actions">' +
+      '<div class="wo-ex-list" id="woExBody">' + listBody + "</div>" +
+      '<div class="wo-ex-actions">' +
       '<button type="button" class="chip ghost" id="woAddRowBtn">+ Add exercise</button>' +
       '<span class="tiny">' + (rows.length || 0) + " move(s)</span>" +
       "</div>" +
@@ -2981,7 +3034,7 @@ textarea{resize:vertical;min-height:56px}
     };
     function refreshRowCount() {
       var n = document.querySelectorAll("#woExBody .wo-ex-row").length;
-      var el = document.querySelector(".wo-table-actions .tiny");
+      var el = document.querySelector(".wo-ex-actions .tiny");
       if (el) el.textContent = n + " move" + (n === 1 ? "" : "s");
     }
     document.getElementById("woAddRowBtn").onclick = function () {
@@ -2992,14 +3045,14 @@ textarea{resize:vertical;min-height:56px}
     document.getElementById("woExBody").onclick = function (e) {
       var btn = e.target.closest(".wo-del");
       if (!btn) return;
-      var tr = btn.closest("tr");
-      if (!tr) return;
+      var card = btn.closest(".wo-ex-row");
+      if (!card) return;
       var body = document.getElementById("woExBody");
       if (body.querySelectorAll(".wo-ex-row").length <= 1) {
-        tr.querySelectorAll("input").forEach(function (inp) { inp.value = ""; });
+        card.querySelectorAll("input").forEach(function (inp) { inp.value = ""; });
         return;
       }
-      tr.remove();
+      card.remove();
       refreshRowCount();
     };
     function readExtra() {
@@ -3007,11 +3060,11 @@ textarea{resize:vertical;min-height:56px}
       return v === "" || isNaN(+v) ? 0 : Math.max(0, Math.round(+v));
     }
     function readExerciseTable() {
-      return Array.prototype.map.call(document.querySelectorAll("#woExBody .wo-ex-row"), function (tr) {
-        var name = (tr.querySelector(".wo-ex-name").value || "").trim();
-        var detail = (tr.querySelector(".wo-ex-detail").value || "").trim();
-        var setsRaw = (tr.querySelector(".wo-ex-sets").value || "").trim();
-        var repsRaw = (tr.querySelector(".wo-ex-reps").value || "").trim();
+      return Array.prototype.map.call(document.querySelectorAll("#woExBody .wo-ex-row"), function (card) {
+        var name = (card.querySelector(".wo-ex-name").value || "").trim();
+        var detail = sanitizeWorkoutDetail(card.querySelector(".wo-ex-detail").value || "");
+        var setsRaw = (card.querySelector("input.wo-ex-sets").value || "").trim();
+        var repsRaw = (card.querySelector("input.wo-ex-reps").value || "").trim();
         if (!name && !detail && !setsRaw && !repsRaw) return null;
         var sets = setsRaw === "" || isNaN(+setsRaw) ? null : Math.max(0, Math.round(+setsRaw));
         var reps = repsRaw === "" || isNaN(+repsRaw) ? null : Math.max(0, Math.round(+repsRaw));
@@ -3120,22 +3173,25 @@ textarea{resize:vertical;min-height:56px}
 
   function openManageWorkoutSets() {
     const sets = loadWorkoutSets();
-    function miniTable(exs) {
+    function miniList(exs) {
       exs = (exs || []).slice(0, 12);
       if (!exs.length) return '<p class="tiny" style="margin:6px 0 0">No exercises saved.</p>';
       return (
-        '<div class="wo-table-wrap" style="margin-top:6px"><table class="wo-table"><thead><tr>' +
-        "<th>Exercise</th><th>Weight</th><th>Sets</th><th>Reps</th>" +
-        "</tr></thead><tbody>" +
+        '<div class="wo-mini-list">' +
         exs.map(function (ex) {
+          var bits = [];
+          var detail = sanitizeWorkoutDetail(ex.detail || "");
+          if (detail) bits.push(detail);
+          if (ex.sets != null) bits.push(ex.sets + " sets");
+          if (ex.reps != null) bits.push(ex.reps + " reps");
           return (
-            "<tr><td>" + escapeHtml(ex.name || "—") + "</td>" +
-            "<td>" + escapeHtml(ex.detail || "—") + "</td>" +
-            "<td style=\"text-align:center\">" + (ex.sets != null ? ex.sets : "—") + "</td>" +
-            "<td style=\"text-align:center\">" + (ex.reps != null ? ex.reps : "—") + "</td></tr>"
+            '<div class="wo-mini-row">' +
+            '<div class="wo-mini-name">' + escapeHtml(ex.name || "—") + "</div>" +
+            '<div class="wo-mini-meta">' + escapeHtml(bits.join(" · ") || "—") + "</div>" +
+            "</div>"
           );
         }).join("") +
-        "</tbody></table></div>"
+        "</div>"
       );
     }
     openSheet(
@@ -3143,14 +3199,14 @@ textarea{resize:vertical;min-height:56px}
       (sets.length ? sets.map(function (s) {
         return (
           '<div style="padding:10px 0;border-bottom:1px solid #f0e6dc">' +
-          '<div class="row"><div style="min-width:0"><b>' + escapeHtml(s.name) + "</b>" +
+          '<div class="row"><div style="min-width:0"><b style="overflow-wrap:anywhere">' + escapeHtml(s.name) + "</b>" +
           '<div class="tiny">' + (s.kind || "lifting") + " · est " + (s.estimateKcal || 0) +
           " · extra +" + (s.defaultExtraKcal || 0) + "</div></div>" +
           '<div class="compact-actions">' +
           '<button type="button" class="chip ghost" data-edit-set="' + s.id + '">Edit</button>' +
           '<button type="button" class="chip ghost" data-del-set="' + s.id + '">Delete</button>' +
           "</div></div>" +
-          miniTable(s.exercises) +
+          miniList(s.exercises) +
           "</div>"
         );
       }).join("") : "<p class='muted'>No sets saved.</p>") +
