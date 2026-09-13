@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v42-20260913-gemini-3-5";
+const CACHE = "snapcal-v43-20260913-food-names";
 const ASSETS = [
   "./",
   "./index.html",

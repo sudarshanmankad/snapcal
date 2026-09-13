@@ -622,7 +622,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v42 · Gemini 3.5 models — if Parse still says “Couldn’t match”, tap Force refresh app below.";
+    if (ver) ver.textContent = "App build: v43 · Smarter food names — Force refresh if Parse label still looks wrong.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -1041,7 +1041,78 @@ textarea{resize:vertical;min-height:56px}
     return null;
   }
 
-  function mapGeminiFoodRows(rows) {
+  function titleCaseWords(s) {
+    return String(s || "").replace(/\b[a-z]/g, function (w) {
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    });
+  }
+
+  // Prefer product/category as the title; put serving + store in the subtitle.
+  // Fixes labels like "1 serving from Costco" for "Hyde pre workout …".
+  function refineGeminiLabels(name, detail, userText) {
+    var raw = String(userText || "").replace(/\s+/g, " ").trim();
+    var n = String(name || "").trim();
+    var d = String(detail || "").trim();
+
+    function isWeakLabel(label) {
+      var t = String(label || "").trim();
+      if (!t) return true;
+      if (/^(?:\d+(?:\.\d+)?\s*)?(servings?|scoops?|tbsp|tsp|cups?)\b/i.test(t)) return true;
+      if (/^(?:\d+(?:\.\d+)?\s*)?(servings?|scoops?)\s+from\b/i.test(t)) return true;
+      if (/^from\s+\w+/i.test(t)) return true;
+      return false;
+    }
+
+    var brand = raw.match(/\b(hyde|c4|ghost|gorilla\s*mode|optimum\s*nutrition|gold\s*standard|premier\s*protein|fairlife|core\s*power|muscle\s*milk)\b/i);
+    var kind = raw.match(/\b(pre[-\s]?workout|creatine(?:\s+monohydrate)?|whey(?:\s+protein)?|protein\s+powder|casein|bcaa|eaa|multivitamin|fish\s+oil|electrolyte(?:s)?|energy\s+drink)\b/i);
+    var product = "";
+    if (brand && kind) product = brand[0] + " " + kind[0];
+    else if (kind) product = kind[0];
+    else if (brand) product = brand[0];
+    if (product) {
+      product = titleCaseWords(product)
+        .replace(/\bPre\s*Workout\b/i, "Pre-Workout")
+        .replace(/\bHyde\b/i, "Hyde");
+    }
+
+    var serving = "";
+    var sm = raw.match(/\b(\d+(?:\.\d+)?\s*(?:servings?|scoops?))\b/i)
+      || d.match(/\b(\d+(?:\.\d+)?\s*(?:servings?|scoops?))\b/i)
+      || n.match(/\b(\d+(?:\.\d+)?\s*(?:servings?|scoops?))\b/i);
+    if (sm) serving = sm[1].toLowerCase().replace(/\s+/g, " ");
+
+    var store = "";
+    var stm = raw.match(/\b(?:from|at)\s+(costco|walmart|sam'?s(?:\s+club)?|trader\s*joe'?s|amazon|target)\b/i);
+    if (stm) store = titleCaseWords(stm[1].replace(/sam'?s/i, "Sam's"));
+
+    if (isWeakLabel(n) && product) n = product;
+    else if (isWeakLabel(n) && !isWeakLabel(d)) n = d;
+
+    var bits = [];
+    if (serving) bits.push(serving);
+    if (store) bits.push(store);
+    // Keep useful non-weak detail that isn't just repeating the product name
+    if (d && !isWeakLabel(d) && d.toLowerCase() !== n.toLowerCase()
+      && d.toLowerCase().indexOf(n.toLowerCase()) !== 0
+      && !/^typical\b/i.test(d)) {
+      bits.push(d);
+    }
+    var newDetail = bits.join(" · ");
+    if (!newDetail && d && d !== n) newDetail = d;
+    return {
+      name: n || product || "Food",
+      detail: newDetail || serving || store || d || n || "Food"
+    };
+  }
+
+  function foodDisplayName(item) {
+    var n = String((item && item.name) || "").trim();
+    var d = String((item && item.detail) || "").trim();
+    if (n) return n;
+    return d || "Food";
+  }
+
+  function mapGeminiFoodRows(rows, userText) {
     return (rows || []).map(function (row) {
       function numOrNull(v) {
         if (v == null || v === "") return null;
@@ -1049,12 +1120,15 @@ textarea{resize:vertical;min-height:56px}
         return isNaN(n) ? null : Math.max(0, Math.round(n * 10) / 10);
       }
       var prot = numOrNull(row.protein);
-      var name = String(row.name || row.food || row.title || row.detail || row.description || "").trim();
-      var detail = String(row.detail || row.description || name || "").trim();
-      if (!name && !detail) return null;
+      var labels = refineGeminiLabels(
+        row.name || row.food || row.title || "",
+        row.detail || row.description || "",
+        userText
+      );
+      if (!labels.name && !labels.detail) return null;
       return {
-        name: name || detail || "Food",
-        detail: detail || name || "Food",
+        name: labels.name,
+        detail: labels.detail,
         kcal: Math.max(0, Math.round(+row.kcal || +row.calories || 0)),
         grams: numOrNull(row.grams != null ? row.grams : row.g),
         protein: prot,
@@ -1093,6 +1167,7 @@ textarea{resize:vertical;min-height:56px}
       "The user typed a free-form meal or product. Estimate every edible yourself — do NOT use a fixed catalog.\n" +
       "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
       "CRITICAL: every object MUST include numeric protein in grams (0 only if truly none). Protein is as important as kcal.\n" +
+      "NAMING: name = the food/product itself (e.g. \"Hyde Pre-Workout\", \"Nonfat Greek Yogurt\"). detail = serving size and optional store only (e.g. \"1 serving · Costco\"). NEVER put serving/store alone in name — bad: \"1 serving from Costco\"; good name: \"Hyde Pre-Workout\", good detail: \"1 serving · Costco\".\n" +
       "Include branded products, Costco items, pre-workout (e.g. Hyde), creatine, vitamins, and supplements. If a serving is ~0 kcal, still return it with kcal 0 and best-guess macros.\n" +
       "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (typical whey ~80% protein); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods or supplements.\n" +
       "Meal: " + text;
@@ -1137,7 +1212,7 @@ textarea{resize:vertical;min-height:56px}
       }
       const rows = unwrapGeminiFoods(parsed);
       if (!rows) throw new Error("Gemini JSON was not a food list");
-      return mapGeminiFoodRows(rows);
+      return mapGeminiFoodRows(rows, text);
     }
 
     // Simple JSON config (no seed/topK). Try each model until one returns foods.
@@ -1993,7 +2068,7 @@ textarea{resize:vertical;min-height:56px}
         return (
           '<div class="meal">' +
           thumb +
-          "<div><b>" + escapeHtml(m.items.map(function (i) { return i.detail; }).join(", ")) + "</b>" +
+          "<div><b>" + escapeHtml(m.items.map(function (i) { return foodDisplayName(i); }).join(", ")) + "</b>" +
           '<div class="meta">' + formatTime(m.at) + " · " + (m.source || "log") +
           (function () {
             var mp = Math.round((m.items || []).reduce(function (a, i) { return a + estimateItemProtein(i); }, 0));
@@ -2192,7 +2267,10 @@ textarea{resize:vertical;min-height:56px}
       if (i.carbs != null) macroBits.push("C " + i.carbs + "g");
       if (i.fat != null) macroBits.push("F " + i.fat + "g");
       body +=
-        '<div class="itemrow"><div><div>' + escapeHtml(i.detail) + "</div>" +
+        '<div class="itemrow"><div><div><b>' + escapeHtml(foodDisplayName(i)) + "</b></div>" +
+        (i.detail && i.detail !== foodDisplayName(i)
+          ? '<div class="tiny">' + escapeHtml(i.detail) + "</div>"
+          : "") +
         (macroBits.length ? '<div class="tiny">' + escapeHtml(macroBits.join(" · ")) + "</div>" : "") +
         (i.warn ? '<div class="tiny">' + escapeHtml(i.warn) + "</div>" : "") +
         gradeBadge(i.grade) +
