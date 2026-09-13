@@ -135,6 +135,13 @@ textarea{resize:vertical;min-height:72px}
     </div>
   </div>
 
+  <div class="card" id="macroCard">
+    <p class="eyebrow" style="margin:0 0 8px">Protein &amp; energy mode</p>
+    <p class="big" id="proteinLine" style="font-size:18px;margin:0">Protein 0g</p>
+    <p class="tiny" id="proteinGoals" style="margin-top:6px">Set height &amp; weight in Setup for goals (0.8 &amp; 1.6 g/kg).</p>
+    <p class="tiny" id="netLine" style="margin-top:8px">Net — · Set Move to see Deficit / Maintain / Surplus</p>
+  </div>
+
   <div class="card">
     <p class="eyebrow">Chat log</p>
     <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed"></textarea>
@@ -248,6 +255,16 @@ textarea{resize:vertical;min-height:72px}
     <p class="tiny" style="margin-top:8px">Chrome ≠ Safari (separate storage). To move meals: Chrome → Setup → Copy full backup → Safari → Setup → Restore. Then Add to Home Screen from Safari at …/snapcal/ (with the slash). Always use that Home Screen icon afterward.</p>
   </div>
   <div class="card">
+    <p class="eyebrow">Body</p>
+    <p class="muted">Used to compute healthy protein targets from your weight. Height is for BMI context.</p>
+    <label class="tiny" style="display:block;margin-top:10px">Height (cm)</label>
+    <input type="number" id="heightCm" inputmode="decimal" min="100" max="250" step="0.1" placeholder="e.g. 175" />
+    <label class="tiny" style="display:block;margin-top:8px">Weight (kg)</label>
+    <input type="number" id="weightKg" inputmode="decimal" min="30" max="300" step="0.1" placeholder="e.g. 75" />
+    <p class="tiny" style="margin-top:8px" id="bodyPreview">Enter height &amp; weight to see BMI and protein goals.</p>
+    <button class="btn primary" id="saveBodyBtn" type="button">Save body</button>
+  </div>
+  <div class="card">
     <p class="eyebrow">Fitness Move (clipboard only)</p>
     <p class="muted"><b>Update never opens Shortcuts.</b> Automations copy Active Energy to the clipboard; SnapCal only <b>reads the clipboard</b> when you open the Home Screen app or tap Update — so you stay in SnapCal.</p>
     <p class="oknote" style="margin-top:10px"><b>Shortcut (once):</b><br/>
@@ -346,7 +363,9 @@ textarea{resize:vertical;min-height:72px}
           lastAutoMoveAt: s.lastAutoMoveAt || 0,
           preferClipboard: s.preferClipboard !== false,
           openShortcutIfEmpty: s.moveSleekV1 ? !!s.openShortcutIfEmpty : false,
-          moveSleekV1: !!s.moveSleekV1
+          moveSleekV1: !!s.moveSleekV1,
+          heightCm: s.heightCm != null && s.heightCm !== "" ? +s.heightCm : null,
+          weightKg: s.weightKg != null && s.weightKg !== "" ? +s.weightKg : null
         };
       }
     } catch (e) {}
@@ -359,7 +378,9 @@ textarea{resize:vertical;min-height:72px}
       lastAutoMoveAt: 0,
       preferClipboard: true,
       openShortcutIfEmpty: false,
-      moveSleekV1: true
+      moveSleekV1: true,
+      heightCm: null,
+      weightKg: null
     };
   }
 
@@ -387,7 +408,9 @@ textarea{resize:vertical;min-height:72px}
       lastAutoMoveAt: s.lastAutoMoveAt != null ? s.lastAutoMoveAt : (cur.lastAutoMoveAt || 0),
       preferClipboard: s.preferClipboard != null ? !!s.preferClipboard : (cur.preferClipboard !== false),
       openShortcutIfEmpty: s.openShortcutIfEmpty != null ? !!s.openShortcutIfEmpty : !!cur.openShortcutIfEmpty,
-      moveSleekV1: s.moveSleekV1 != null ? !!s.moveSleekV1 : !!cur.moveSleekV1
+      moveSleekV1: s.moveSleekV1 != null ? !!s.moveSleekV1 : !!cur.moveSleekV1,
+      heightCm: s.heightCm != null ? s.heightCm : (cur.heightCm != null ? cur.heightCm : null),
+      weightKg: s.weightKg != null ? s.weightKg : (cur.weightKg != null ? cur.weightKg : null)
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
   }
@@ -476,6 +499,11 @@ textarea{resize:vertical;min-height:72px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
 
+    const hEl = document.getElementById("heightCm");
+    const wEl = document.getElementById("weightKg");
+    if (hEl) hEl.value = s.heightCm != null ? s.heightCm : "";
+    if (wEl) wEl.value = s.weightKg != null ? s.weightKg : "";
+    updateBodyPreview();
     const snEl = document.getElementById("shortcutName");
     if (snEl) snEl.value = s.shortcutName || "SnapCal Move";
     const ms = document.getElementById("moveAutoStatus");
@@ -1090,6 +1118,40 @@ textarea{resize:vertical;min-height:72px}
     }, 0);
   }
 
+  function eatenProtein(d) {
+    return Math.round((d.meals || []).reduce(function (s, m) {
+      return s + (m.items || []).reduce(function (a, i) {
+        var p = i.protein;
+        return a + (p != null && !isNaN(+p) ? +p : 0);
+      }, 0);
+    }, 0));
+  }
+
+  function bodyMetrics() {
+    const s = loadSettings();
+    const h = s.heightCm != null ? +s.heightCm : NaN;
+    const w = s.weightKg != null ? +s.weightKg : NaN;
+    const hasW = !isNaN(w) && w >= 30 && w <= 300;
+    const hasH = !isNaN(h) && h >= 100 && h <= 250;
+    const rda = hasW ? Math.round(w * 0.8) : null;
+    const active = hasW ? Math.round(w * 1.6) : null;
+    var bmi = null;
+    if (hasW && hasH) bmi = Math.round((w / ((h / 100) * (h / 100))) * 10) / 10;
+    return { heightCm: hasH ? h : null, weightKg: hasW ? w : null, rda: rda, active: active, bmi: bmi };
+  }
+
+  function energyMode(intake, move) {
+    if (move == null || !(+move > 0)) {
+      return { net: null, label: "Set Move", detail: "Net needs Fitness Move" };
+    }
+    const net = Math.round(+intake - +move);
+    var label = "Maintain";
+    if (net <= -200) label = "Deficit";
+    else if (net >= 200) label = "Surplus";
+    const sign = net > 0 ? ("+" + net) : String(net);
+    return { net: net, label: label, detail: "Net " + sign + " kcal (food − Move) · " + label };
+  }
+
   function mealTotal(m) {
     return (m.items || []).reduce(function (a, i) { return a + (i.kcal || 0); }, 0);
   }
@@ -1294,6 +1356,24 @@ textarea{resize:vertical;min-height:72px}
     document.getElementById("barFill").style.width = pct + "%";
     document.getElementById("budgetCard").classList.toggle("over", e > BUDGET);
     document.getElementById("move").textContent = d.move ? d.move + " kcal" : "Not set";
+    const prot = eatenProtein(d);
+    const body = bodyMetrics();
+    const pLine = document.getElementById("proteinLine");
+    const pGoals = document.getElementById("proteinGoals");
+    const nLine = document.getElementById("netLine");
+    if (pLine) pLine.textContent = "Protein " + prot + "g";
+    if (pGoals) {
+      if (body.rda != null && body.active != null) {
+        pGoals.textContent = "Goals · RDA " + body.rda + "g (0.8×kg) · Active " + body.active + "g (1.6×kg)" +
+          (body.bmi != null ? " · BMI " + body.bmi : "");
+      } else {
+        pGoals.textContent = "Set height & weight in Setup for goals (0.8 & 1.6 g/kg).";
+      }
+    }
+    if (nLine) {
+      const mode = energyMode(e, d.move);
+      nLine.textContent = mode.detail + " · based on Move, not full TDEE";
+    }
     document.getElementById("count").textContent = (d.meals || []).length;
     const list = document.getElementById("meals");
     if (!d.meals.length) {
@@ -1336,6 +1416,7 @@ textarea{resize:vertical;min-height:72px}
         '<div class="statgrid" style="margin-top:10px">' +
         '<div class="stat"><p class="tiny">Eaten</p><p class="big">' + e + "</p></div>" +
         '<div class="stat"><p class="tiny">Move</p><p class="big">' + (d.move || "—") + "</p></div>" +
+        '<div class="stat"><p class="tiny">Protein</p><p class="big">' + eatenProtein(d) + "g</p></div>" +
         "</div>" +
         (d.workoutAdj ? '<p class="tiny" style="margin-top:8px">Lifting adj +' + d.workoutAdj + "</p>" : "") +
         "<p class='tiny' style='margin-top:8px'>" + (d.meals || []).length + " meal(s)</p>" +
@@ -1696,6 +1777,54 @@ textarea{resize:vertical;min-height:72px}
     const st = document.getElementById("aiTestStatus");
     if (st) st.textContent = "";
     toast("Gemini key removed");
+  };
+
+
+  function updateBodyPreview() {
+    const h = parseFloat((document.getElementById("heightCm") || {}).value);
+    const w = parseFloat((document.getElementById("weightKg") || {}).value);
+    const el = document.getElementById("bodyPreview");
+    if (!el) return;
+    const hasW = !isNaN(w) && w >= 30 && w <= 300;
+    const hasH = !isNaN(h) && h >= 100 && h <= 250;
+    if (!hasW) {
+      el.textContent = "Enter height & weight to see BMI and protein goals.";
+      return;
+    }
+    const rda = Math.round(w * 0.8);
+    const active = Math.round(w * 1.6);
+    var extra = "Protein goals · RDA " + rda + "g (0.8×kg) · Active " + active + "g (1.6×kg)";
+    if (hasH) {
+      const bmi = Math.round((w / ((h / 100) * (h / 100))) * 10) / 10;
+      extra += " · BMI " + bmi;
+    }
+    el.textContent = extra;
+  }
+
+  var heightInp = document.getElementById("heightCm");
+  var weightInp = document.getElementById("weightKg");
+  if (heightInp) heightInp.addEventListener("input", updateBodyPreview);
+  if (weightInp) weightInp.addEventListener("input", updateBodyPreview);
+
+  document.getElementById("saveBodyBtn").onclick = function () {
+    const h = parseFloat(document.getElementById("heightCm").value);
+    const w = parseFloat(document.getElementById("weightKg").value);
+    if (isNaN(w) || w < 30 || w > 300) {
+      toast("Enter a valid weight in kg (30–300)");
+      return;
+    }
+    if (document.getElementById("heightCm").value !== "" && (isNaN(h) || h < 100 || h > 250)) {
+      toast("Height must be 100–250 cm (or leave blank)");
+      return;
+    }
+    const s = loadSettings();
+    s.weightKg = Math.round(w * 10) / 10;
+    s.heightCm = document.getElementById("heightCm").value === "" ? null : Math.round(h * 10) / 10;
+    saveSettings(s);
+    updateBodyPreview();
+    renderToday();
+    renderSetupAi();
+    toast("Body saved · Active protein goal " + Math.round(s.weightKg * 1.6) + "g");
   };
 
   document.getElementById("saveMoveAutoBtn").onclick = function () {
