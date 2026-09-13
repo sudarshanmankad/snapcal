@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v19-20260912-homescreen-move";
+const CACHE = "snapcal-v20-20260913-auto-clip-open";
 const ASSETS = [
   "./",
   "./index.html",

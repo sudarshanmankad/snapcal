@@ -257,7 +257,7 @@ textarea{resize:vertical;min-height:72px}
       4) <b>Copy to Clipboard</b> → Rounded Number<br/>
       5) <b>Do not</b> add Open URLs<br/>
       6) Name exactly <b>SnapCal Move</b><br/><br/>
-      Tap <b>Update</b> from the <b>Home Screen</b> icon → Shortcuts runs → you return here → Move updates. If iPhone asks Paste once, tap Allow.</p>
+      Tap <b>Update</b> from the <b>Home Screen</b> icon → reads clipboard (or runs Shortcut if empty). If iPhone asks Paste once, tap Allow.<br/><br/><b>Automation (refresh clipboard):</b> Shortcuts → Automation → + → Time of Day → pick times → Run Shortcut → SnapCal Move → Ask Before Running <b>OFF</b>. Apple has no “every hour” — add one automation per time (e.g. 8:00, 12:00, 16:00, 20:00). Same Shortcut: Copy only, no Open URLs. Phone unlocked.</p>
     <label class="tiny" style="display:block;margin-top:10px">Shortcut name (must match exactly)</label>
     <input type="text" id="shortcutName" value="SnapCal Move" />
     <button class="btn primary" id="saveMoveAutoBtn" type="button">Save shortcut name</button>
@@ -1236,9 +1236,18 @@ textarea{resize:vertical;min-height:72px}
 
     var pending = false;
     try { pending = sessionStorage.getItem("snapcal-pending-move") === "1"; } catch (e) {}
-    if (!pending) return;
 
-    // Returned from Shortcuts into the same app — apply clipboard Move here (Home Screen storage).
+    const s = loadSettings();
+
+    // Hourly Automation left Active Energy on the clipboard — apply quietly on open.
+    if (!pending) {
+      if (!s.autoMove) return;
+      if (s.lastAutoMoveAt && Date.now() - s.lastAutoMoveAt < 45 * 1000) return;
+      tryClipboardMove(true);
+      return;
+    }
+
+    // Returned from Update → Shortcuts — apply clipboard here (Home Screen storage).
     function attempt(pass) {
       tryClipboardMove(pass > 0 ? false : true).then(function (ok) {
         if (ok) {
@@ -1249,7 +1258,6 @@ textarea{resize:vertical;min-height:72px}
           setTimeout(function () { attempt(pass + 1); }, 500);
           return;
         }
-        // Leave pending so next focus can retry; prompt user once
         toast("Tap Allow Paste if asked — or Edit Move. Delete Open URLs from the Shortcut so you return here.");
       });
     }
@@ -1272,9 +1280,14 @@ textarea{resize:vertical;min-height:72px}
       "6. Do NOT add Open URLs (delete it if you already added it)",
       "7. Save",
       "",
-      "Use: open SnapCal from the Home Screen icon → tap Update.",
-      "Shortcuts runs, then iPhone returns to SnapCal and Move updates.",
-      "If iPhone asks Paste once, tap Allow."
+      "Use: Home Screen SnapCal → Update (reads clipboard, or runs Shortcut if empty).",
+      "If iPhone asks Paste once, tap Allow.",
+      "",
+      "Automation (keep clipboard fresh):",
+      "Shortcuts → Automation → + → Time of Day → Daily",
+      "Run Shortcut → SnapCal Move → Ask Before Running OFF",
+      "Add one automation per clock time (Apple has no every-hour).",
+      "Phone must be unlocked for Health to copy."
     ].join("\n");
   }
 
@@ -1704,11 +1717,14 @@ textarea{resize:vertical;min-height:72px}
   };
 
   function onUpdateMove() {
-    // Run Shortcut; it must Copy Move then end (no Open URLs) so we return to this Home Screen app.
+    // Clipboard first (Automation may have already copied Move). If empty, run Shortcut.
     if (!isStandaloneApp()) {
       toast("Open SnapCal from the Home Screen icon first — Chrome won’t keep your Move.");
     }
-    fetchMoveViaShortcut("manual");
+    tryClipboardMove(false).then(function (ok) {
+      if (ok) return;
+      fetchMoveViaShortcut("manual");
+    });
   }
   var updToday = document.getElementById("updateMoveBtn");
   var updSetup = document.getElementById("updateMoveSetupBtn");
