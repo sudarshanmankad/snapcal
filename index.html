@@ -246,7 +246,7 @@ textarea{resize:vertical;min-height:56px}
 
   <div class="card">
     <textarea id="text" rows="2" placeholder="I ate 35g oats, 30g protein whey which is 160cal, 5 g chia seed" style="min-height:56px;margin:0"></textarea>
-    <button class="btn primary" id="logBtn" type="button" style="margin-top:6px">Parse &amp; confirm</button>
+    <button class="btn primary" id="logBtn" type="button" style="margin-top:6px">Parse with Gemini</button>
     <p class="tiny hide" id="chatHint"></p>
   </div>
 
@@ -335,8 +335,8 @@ textarea{resize:vertical;min-height:56px}
     </div>
     <p class="tiny" style="margin-top:6px">Hidden like a password is normal. Tap Show to check it starts with <code>AIza</code>, then Save.</p>
     <label class="tiny" style="display:block;margin-top:8px">Model</label>
-    <input type="text" id="geminiModel" value="gemini-2.5-flash" />
-    <p class="tiny" style="margin-top:4px">Use <code>gemini-2.5-flash</code> (free). Old <code>gemini-2.0-flash</code> is shut down.</p>
+    <input type="text" id="geminiModel" value="gemini-3.5-flash" />
+    <p class="tiny" style="margin-top:4px">Use <code>gemini-3.5-flash</code> (free). Old <code>gemini-2.5-flash</code> / <code>2.5-flash-lite</code> are shut down for new keys.</p>
     <label class="row" style="margin-top:10px;gap:10px">
       <input type="checkbox" id="useLlm" checked style="width:auto" />
       <span class="tiny" style="color:var(--ink)">Use Gemini for chat (required for protein on free-form meals)</span>
@@ -344,7 +344,9 @@ textarea{resize:vertical;min-height:56px}
     <button class="btn primary" id="saveAiBtn" type="button">Save AI settings</button>
     <button class="btn light" id="testAiBtn" type="button">Test Gemini</button>
     <button class="btn light" id="clearAiBtn" type="button">Remove key</button>
+    <button class="btn light" id="forceRefreshBtn" type="button">Force refresh app</button>
     <p class="tiny" style="margin-top:8px" id="aiTestStatus"></p>
+    <p class="tiny" style="margin-top:6px" id="appVersionLabel">App build: …</p>
     <p class="tiny" style="margin-top:8px">Get a key: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> (keys usually start with <code>AIza</code>). Free tier is enough for meal chat. Key stays in Safari localStorage.</p>
   </div>
   <div class="card">
@@ -470,9 +472,12 @@ textarea{resize:vertical;min-height:56px}
   ];
 
   function migrateGeminiModel(model) {
-    var m = String(model || "").trim() || "gemini-2.5-flash";
-    // gemini-2.0-flash was shut down (June 2026)
-    if (/^gemini-2\.0-flash/.test(m)) return "gemini-2.5-flash";
+    var m = String(model || "").trim() || "gemini-3.5-flash";
+    // Retired models → current free-tier flash
+    if (/^gemini-2\.0-flash/.test(m)) return "gemini-3.5-flash";
+    if (/^gemini-2\.5-flash-lite/.test(m)) return "gemini-3.5-flash-lite";
+    if (/^gemini-2\.5-flash/.test(m)) return "gemini-3.5-flash";
+    if (m === "gemini-flash-latest") return "gemini-3.5-flash";
     return m;
   }
 
@@ -482,7 +487,7 @@ textarea{resize:vertical;min-height:56px}
       if (s && typeof s === "object") {
         return {
           geminiKey: s.geminiKey || "",
-          model: migrateGeminiModel(s.model || "gemini-2.5-flash"),
+          model: migrateGeminiModel(s.model || "gemini-3.5-flash"),
           useLlm: s.useLlm !== false,
           autoMove: s.moveSleekV1 ? !!s.autoMove : true,
           shortcutName: s.shortcutName || "SnapCal Move",
@@ -501,7 +506,7 @@ textarea{resize:vertical;min-height:56px}
     } catch (e) {}
     return {
       geminiKey: "",
-      model: "gemini-2.5-flash",
+      model: "gemini-3.5-flash",
       useLlm: true,
       autoMove: true,
       shortcutName: "SnapCal Move",
@@ -535,7 +540,7 @@ textarea{resize:vertical;min-height:56px}
     })();
     const next = {
       geminiKey: s.geminiKey != null ? s.geminiKey : (cur.geminiKey || ""),
-      model: s.model != null ? s.model : (cur.model || "gemini-2.5-flash"),
+      model: s.model != null ? s.model : (cur.model || "gemini-3.5-flash"),
       useLlm: s.useLlm != null ? s.useLlm : (cur.useLlm !== false),
       autoMove: s.autoMove != null ? !!s.autoMove : (cur.autoMove != null ? !!cur.autoMove : true),
       shortcutName: s.shortcutName != null ? s.shortcutName : (cur.shortcutName || "SnapCal Move"),
@@ -586,6 +591,7 @@ textarea{resize:vertical;min-height:56px}
       name: String(set.name || "Workout").trim() || "Workout",
       createdAt: set.createdAt || Date.now(),
       updatedAt: Date.now(),
+      photoThumb: set.photoThumb ? String(set.photoThumb).slice(0, 120000) : null,
       exercises: Array.isArray(set.exercises) ? set.exercises.map(function (ex) {
         return {
           name: String(ex.name || "Exercise").trim() || "Exercise",
@@ -604,8 +610,11 @@ textarea{resize:vertical;min-height:56px}
     if (!next.defaultExtraKcal) next.defaultExtraKcal = suggestedWorkoutExtra(next.estimateKcal, next.kind);
     var idx = -1;
     sets.forEach(function (s, i) { if (s.id === id) idx = i; });
-    if (idx >= 0) sets[idx] = next;
-    else sets.unshift(next);
+    if (idx >= 0) {
+      // Keep prior thumb if this save didn't include one
+      if (!next.photoThumb && sets[idx].photoThumb) next.photoThumb = sets[idx].photoThumb;
+      sets[idx] = next;
+    } else sets.unshift(next);
     saveWorkoutSets(sets);
     return next;
   }
@@ -674,7 +683,7 @@ textarea{resize:vertical;min-height:56px}
     const modelEl = document.getElementById("geminiModel");
     const useEl = document.getElementById("useLlm");
     if (keyEl) keyEl.value = s.geminiKey || "";
-    if (modelEl) modelEl.value = s.model || "gemini-2.5-flash";
+    if (modelEl) modelEl.value = s.model || "gemini-3.5-flash";
     if (useEl) useEl.checked = s.useLlm !== false;
     const n = loadMyFoods().length;
     const countEl = document.getElementById("myFoodsCount");
@@ -693,6 +702,8 @@ textarea{resize:vertical;min-height:56px}
       }, 0);
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
+    const ver = document.getElementById("appVersionLabel");
+    if (ver) ver.textContent = "App build: v44 · Workout Sets (photo → reusable set) — Force refresh if Today has no Workout card.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -787,6 +798,7 @@ textarea{resize:vertical;min-height:56px}
         move: old.move || 0,
         workoutAdj: 0,
         workoutNote: "",
+        workouts: [],
         meals: (old.meals || []).map(function (m) {
           return {
             id: uid(),
@@ -988,7 +1000,7 @@ textarea{resize:vertical;min-height:56px}
       const cur = loadSettings();
       saveSettings({
         geminiKey: payload.settings.geminiKey || cur.geminiKey || "",
-        model: payload.settings.model || cur.model || "gemini-2.5-flash",
+        model: payload.settings.model || cur.model || "gemini-3.5-flash",
         useLlm: payload.settings.useLlm != null ? payload.settings.useLlm : cur.useLlm
       });
     }
@@ -1150,19 +1162,123 @@ textarea{resize:vertical;min-height:56px}
     return best;
   }
 
-  // Stable Gemini parses: same sentence → same macros (temp 0 + short cache).
+  // Same-sentence cache so re-parses stay stable (without brittle seed/topK clamps).
   var geminiParseCache = {};
   function mealCacheKey(text) {
     return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
   }
-  function simpleSeed(text) {
-    var h = 2166136261;
-    var s = mealCacheKey(text);
-    for (var i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      h = Math.imul(h, 16777619);
+
+  function unwrapGeminiFoods(parsed) {
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === "object") {
+      if (Array.isArray(parsed.items)) return parsed.items;
+      if (Array.isArray(parsed.foods)) return parsed.foods;
+      if (Array.isArray(parsed.food)) return parsed.food;
+      if (Array.isArray(parsed.meals)) return parsed.meals;
     }
-    return (h >>> 0) % 2147483647;
+    return null;
+  }
+
+  function titleCaseWords(s) {
+    return String(s || "").replace(/\b[a-z]/g, function (w) {
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    });
+  }
+
+  // Prefer product/category as the title; put serving + store in the subtitle.
+  // Fixes labels like "1 serving from Costco" for "Hyde pre workout …".
+  function refineGeminiLabels(name, detail, userText) {
+    var raw = String(userText || "").replace(/\s+/g, " ").trim();
+    var n = String(name || "").trim();
+    var d = String(detail || "").trim();
+
+    function isWeakLabel(label) {
+      var t = String(label || "").trim();
+      if (!t) return true;
+      if (/^(?:\d+(?:\.\d+)?\s*)?(servings?|scoops?|tbsp|tsp|cups?)\b/i.test(t)) return true;
+      if (/^(?:\d+(?:\.\d+)?\s*)?(servings?|scoops?)\s+from\b/i.test(t)) return true;
+      if (/^from\s+\w+/i.test(t)) return true;
+      return false;
+    }
+
+    var brand = raw.match(/\b(hyde|c4|ghost|gorilla\s*mode|optimum\s*nutrition|gold\s*standard|premier\s*protein|fairlife|core\s*power|muscle\s*milk)\b/i);
+    var kind = raw.match(/\b(pre[-\s]?workout|creatine(?:\s+monohydrate)?|whey(?:\s+protein)?|protein\s+powder|casein|bcaa|eaa|multivitamin|fish\s+oil|electrolyte(?:s)?|energy\s+drink)\b/i);
+    var product = "";
+    if (brand && kind) product = brand[0] + " " + kind[0];
+    else if (kind) product = kind[0];
+    else if (brand) product = brand[0];
+    if (product) {
+      product = titleCaseWords(product)
+        .replace(/\bPre\s*Workout\b/i, "Pre-Workout")
+        .replace(/\bHyde\b/i, "Hyde");
+    }
+
+    var serving = "";
+    var sm = raw.match(/\b(\d+(?:\.\d+)?\s*(?:servings?|scoops?))\b/i)
+      || d.match(/\b(\d+(?:\.\d+)?\s*(?:servings?|scoops?))\b/i)
+      || n.match(/\b(\d+(?:\.\d+)?\s*(?:servings?|scoops?))\b/i);
+    if (sm) serving = sm[1].toLowerCase().replace(/\s+/g, " ");
+
+    var store = "";
+    var stm = raw.match(/\b(?:from|at)\s+(costco|walmart|sam'?s(?:\s+club)?|trader\s*joe'?s|amazon|target)\b/i);
+    if (stm) store = titleCaseWords(stm[1].replace(/sam'?s/i, "Sam's"));
+
+    if (isWeakLabel(n) && product) n = product;
+    else if (isWeakLabel(n) && !isWeakLabel(d)) n = d;
+
+    var bits = [];
+    if (serving) bits.push(serving);
+    if (store) bits.push(store);
+    // Keep useful non-weak detail that isn't just repeating the product name
+    if (d && !isWeakLabel(d) && d.toLowerCase() !== n.toLowerCase()
+      && d.toLowerCase().indexOf(n.toLowerCase()) !== 0
+      && !/^typical\b/i.test(d)) {
+      bits.push(d);
+    }
+    var newDetail = bits.join(" · ");
+    if (!newDetail && d && d !== n) newDetail = d;
+    return {
+      name: n || product || "Food",
+      detail: newDetail || serving || store || d || n || "Food"
+    };
+  }
+
+  function foodDisplayName(item) {
+    var n = String((item && item.name) || "").trim();
+    var d = String((item && item.detail) || "").trim();
+    if (n) return n;
+    return d || "Food";
+  }
+
+  function mapGeminiFoodRows(rows, userText) {
+    return (rows || []).map(function (row) {
+      function numOrNull(v) {
+        if (v == null || v === "") return null;
+        const n = +v;
+        return isNaN(n) ? null : Math.max(0, Math.round(n * 10) / 10);
+      }
+      var prot = numOrNull(row.protein);
+      var labels = refineGeminiLabels(
+        row.name || row.food || row.title || "",
+        row.detail || row.description || "",
+        userText
+      );
+      if (!labels.name && !labels.detail) return null;
+      return {
+        name: labels.name,
+        detail: labels.detail,
+        kcal: Math.max(0, Math.round(+row.kcal || +row.calories || 0)),
+        grams: numOrNull(row.grams != null ? row.grams : row.g),
+        protein: prot,
+        carbs: numOrNull(row.carbs != null ? row.carbs : row.carbohydrates),
+        fat: numOrNull(row.fat),
+        grade: row.grade === "said" || row.grade === "grams" ? row.grade : "llm",
+        warn: row.warn || (prot == null
+          ? "Gemini omitted protein — re-parse or edit."
+          : "Gemini estimate — confirm before trusting.")
+      };
+    // Keep 0-kcal items (pre-workout, zero-cal drinks, etc.). Drop only blank rows.
+    }).filter(Boolean);
   }
 
   function parseWithGemini(text) {
@@ -1176,122 +1292,128 @@ textarea{resize:vertical;min-height:56px}
         return out;
       }));
     }
-    const model = encodeURIComponent(migrateGeminiModel(s.model || "gemini-2.5-flash"));
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+    // Same model fallback list as Test Gemini — Test can pass on model #2 while
+    // Parse used to fail forever on a dead saved model name.
+    const modelsTry = [];
+    const preferred = migrateGeminiModel(s.model || "gemini-3.5-flash");
+    modelsTry.push(preferred);
+    ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"].forEach(function (m) {
+      if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
+    });
     const prompt =
-      "You are a nutrition estimator. Be DETERMINISTIC and CONSISTENT: the same meal sentence must produce the same foods and macros every time.\n" +
-      "The user typed a free-form meal. Estimate every food yourself — do NOT use a fixed catalog.\n" +
+      "You are a nutrition estimator for a calorie tracker.\n" +
+      "The user typed a free-form meal or product. Estimate every edible yourself — do NOT use a fixed catalog.\n" +
       "Return ONLY a JSON array of objects with keys: name, detail, kcal, grams (number or null), protein (g), carbs (g), fat (g), grade (llm|said|grams), warn (short string).\n" +
-      "CRITICAL: every object MUST include a numeric protein in grams (use 0 only if the food truly has none). Protein is as important as kcal.\n" +
-      "Use stable round numbers (whole kcal; protein/carbs/fat to 0 or 1 decimal). Prefer common USDA-like defaults when unsure rather than inventing a new number each time.\n" +
-      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (typical whey ~80% protein); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods.\n" +
+      "CRITICAL: every object MUST include numeric protein in grams (0 only if truly none). Protein is as important as kcal.\n" +
+      "NAMING: name = the food/product itself (e.g. \"Hyde Pre-Workout\", \"Nonfat Greek Yogurt\"). detail = serving size and optional store only (e.g. \"1 serving · Costco\"). NEVER put serving/store alone in name — bad: \"1 serving from Costco\"; good name: \"Hyde Pre-Workout\", good detail: \"1 serving · Costco\".\n" +
+      "Include branded products, Costco items, pre-workout (e.g. Hyde), creatine, vitamins, and supplements. If a serving is ~0 kcal, still return it with kcal 0 and best-guess macros.\n" +
+      "Rules: include EVERY edible mentioned; honor raw/uncooked/cooked/dry; split mixes like 'onion + broccoli + beans 250g'; trailing/leading grams count; if user says which/that is N cal, use that kcal and grade said; if user says 'Ng protein' before a food (e.g. '30g protein whey') or 'with Ng protein', that N is protein macros — set protein=N and grade said; 'Ng whey protein' (protein after the food name) means powder weight Ng (typical whey ~80% protein); always estimate protein even when the user only gave grams or kcal; be slightly conservative on kcal; macros should roughly match kcal (4/4/9); no markdown; do not refuse common foods or supplements.\n" +
       "Meal: " + text;
-    return fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0,
-          topP: 0.1,
-          topK: 1,
-          seed: simpleSeed(text),
-          responseMimeType: "application/json"
-        }
-      })
-    }).then(function (res) {
-      return res.json().then(function (data) {
-        if (!res.ok) {
-          const msg = (data && data.error && data.error.message) || ("Gemini HTTP " + res.status);
-          // Some models reject seed — retry once without it
-          if (/seed/i.test(msg)) {
-            return fetch(url, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                generationConfig: {
-                  temperature: 0,
-                  topP: 0.1,
-                  topK: 1,
-                  responseMimeType: "application/json"
-                }
-              })
-            }).then(function (res2) {
-              return res2.json().then(function (data2) {
-                if (!res2.ok) {
-                  throw new Error((data2 && data2.error && data2.error.message) || ("Gemini HTTP " + res2.status));
-                }
-                return data2;
-              });
-            });
+
+    function postGemini(modelName, generationConfig) {
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(modelName) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: generationConfig
+        })
+      }).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) {
+            throw new Error((data && data.error && data.error.message) || ("Gemini HTTP " + res.status));
           }
-          throw new Error(msg);
-        }
-        return data;
+          return data;
+        });
       });
-    }).then(function (data) {
-        const rawText = (((data.candidates || [])[0] || {}).content || {}).parts
-          ? data.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("")
-          : "";
-        let parsed;
-        try {
-          parsed = JSON.parse(rawText);
-        } catch (e) {
-          const m = rawText.match(/\[[\s\S]*\]/);
-          if (!m) throw new Error("Gemini returned non-JSON");
-          parsed = JSON.parse(m[0]);
-        }
-        if (!Array.isArray(parsed)) throw new Error("Gemini JSON was not an array");
-        var items = parsed.map(function (row) {
-          function numOrNull(v) {
-            if (v == null || v === "") return null;
-            const n = +v;
-            return isNaN(n) ? null : Math.max(0, Math.round(n * 10) / 10);
+    }
+
+    function itemsFromResponse(data) {
+      const cand = (data.candidates || [])[0] || {};
+      const finish = cand.finishReason || "";
+      const rawText = (cand.content && cand.content.parts)
+        ? cand.content.parts.map(function (p) { return p.text || ""; }).join("")
+        : "";
+      if (!rawText) {
+        throw new Error(finish && finish !== "STOP"
+          ? ("Gemini blocked/empty response (" + finish + ")")
+          : "Gemini returned an empty response");
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(rawText);
+      } catch (e) {
+        const m = rawText.match(/\[[\s\S]*\]/) || rawText.match(/\{[\s\S]*\}/);
+        if (!m) throw new Error("Gemini returned non-JSON");
+        parsed = JSON.parse(m[0]);
+      }
+      const rows = unwrapGeminiFoods(parsed);
+      if (!rows) throw new Error("Gemini JSON was not a food list");
+      return mapGeminiFoodRows(rows, text);
+    }
+
+    // Simple JSON config (no seed/topK). Try each model until one returns foods.
+    function tryModel(i, lastErr) {
+      if (i >= modelsTry.length) {
+        return Promise.reject(new Error(lastErr || "Gemini returned no foods"));
+      }
+      const modelName = modelsTry[i];
+      return postGemini(modelName, {
+        temperature: 0.2,
+        responseMimeType: "application/json"
+      }).then(function (data) {
+        var items = itemsFromResponse(data);
+        if (items.length) {
+          if (modelName !== s.model) {
+            saveSettings({ model: modelName });
+            var modelEl = document.getElementById("geminiModel");
+            if (modelEl) modelEl.value = modelName;
           }
-          var prot = numOrNull(row.protein);
-          return {
-            name: String(row.name || "Food").trim(),
-            detail: String(row.detail || row.name || "Food").trim(),
-            kcal: Math.max(0, Math.round(+row.kcal || 0)),
-            grams: numOrNull(row.grams),
-            protein: prot,
-            carbs: numOrNull(row.carbs),
-            fat: numOrNull(row.fat),
-            grade: row.grade === "said" || row.grade === "grams" ? row.grade : "llm",
-            warn: row.warn || (prot == null
-              ? "Gemini omitted protein — re-parse or edit."
-              : "Gemini estimate — confirm before trusting.")
-          };
-        }).filter(function (i) { return i.kcal > 0; });
-        if (cacheKey && items.length) geminiParseCache[cacheKey] = items;
-        return items;
+          return items;
+        }
+        return postGemini(modelName, {
+          temperature: 0,
+          responseMimeType: "application/json"
+        }).then(function (data2) {
+          var items2 = itemsFromResponse(data2);
+          if (items2.length) return items2;
+          return tryModel(i + 1, "Gemini returned no foods");
+        });
+      }).catch(function (err) {
+        var msg = String(err.message || err);
+        if (/API key|API_KEY|permission|403|401/i.test(msg)) throw err;
+        return tryModel(i + 1, msg);
+      });
+    }
+
+    return tryModel(0).then(function (items) {
+      if (cacheKey && items.length) geminiParseCache[cacheKey] = items;
+      return items;
     });
   }
 
   async function parseChatSmart(raw) {
     const s = loadSettings();
-    // LLM-first: when Gemini is configured, the model invents the meal list
-    // (no built-in catalog matching). Local parse is offline / no-key fallback only.
+    // LLM-first: when Gemini is configured, the model invents the meal list.
+    // Do not silently fall back to the built-in catalog (that hides Gemini failures).
     if (s.geminiKey && s.useLlm) {
       try {
         const llmItems = await parseWithGemini(raw);
         if (llmItems && llmItems.length) {
           return { items: applySaidProteinFromRaw(raw, llmItems), unknown: [], sourceNote: "gemini" };
         }
-        const localEmpty = parseChat(raw);
         return {
-          items: localEmpty.items,
-          unknown: localEmpty.unknown,
-          sourceNote: "local",
-          llmError: "Gemini returned no foods — fell back to built-in list."
+          items: [],
+          unknown: [String(raw || "").trim()].filter(Boolean),
+          sourceNote: "gemini-empty",
+          llmError: "Gemini returned no foods."
         };
       } catch (err) {
-        const localFail = parseChat(raw);
         return {
-          items: localFail.items,
-          unknown: localFail.unknown,
-          sourceNote: "local",
+          items: [],
+          unknown: [String(raw || "").trim()].filter(Boolean),
+          sourceNote: "gemini-error",
           llmError: String(err.message || err)
         };
       }
@@ -1305,6 +1427,87 @@ textarea{resize:vertical;min-height:56px}
         ? "Gemini is off in Setup — using built-in list only."
         : "Add a Gemini API key in Setup so chat can estimate any meal from your sentence."
     };
+  }
+
+  // Keep Setup form + stored key in sync (iOS often shows the password box empty).
+  function syncAiSettingsFromForm() {
+    var keyEl = document.getElementById("geminiKey");
+    var modelEl = document.getElementById("geminiModel");
+    var useEl = document.getElementById("useLlm");
+    var typed = keyEl ? keyEl.value.trim() : "";
+    var patch = {
+      model: modelEl && modelEl.value.trim() ? modelEl.value.trim() : "gemini-3.5-flash",
+      useLlm: useEl ? !!useEl.checked : true
+    };
+    if (typed) patch.geminiKey = typed;
+    saveSettings(patch);
+    renderSetupAi();
+    return loadSettings();
+  }
+
+  // Shared health check used by Setup → Test Gemini and by Parse & confirm.
+  // Returns { ok, model, reply, error }.
+  async function testGeminiHealth(opts) {
+    opts = opts || {};
+    const s = loadSettings();
+    const status = document.getElementById("aiTestStatus");
+    if (!s.geminiKey) {
+      const msg = "No Gemini key saved — paste one from Google AI Studio in Setup.";
+      if (status) status.textContent = msg;
+      return { ok: false, error: msg };
+    }
+    if (s.geminiKey.indexOf("AIza") !== 0 && status && !opts.quiet) {
+      status.textContent = "This key does not look like a Gemini API key (usually starts with AIza).";
+    }
+    const modelsTry = [];
+    const preferred = migrateGeminiModel(s.model || "gemini-3.5-flash");
+    modelsTry.push(preferred);
+    ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"].forEach(function (m) {
+      if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
+    });
+    let lastErr = null;
+    let okText = "";
+    let usedModel = preferred;
+    for (let i = 0; i < modelsTry.length; i++) {
+      usedModel = modelsTry[i];
+      if (status && !opts.quiet) status.textContent = "Calling " + usedModel + "…";
+      try {
+        const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(usedModel) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: "Reply with exactly: OK" }] }],
+            generationConfig: { temperature: 0, maxOutputTokens: 16 }
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          lastErr = (data && data.error && data.error.message) || ("HTTP " + res.status);
+          if (/API key|API_KEY|permission|403|401/i.test(lastErr)) break;
+          continue;
+        }
+        okText = ((((data.candidates || [])[0] || {}).content || {}).parts || [])
+          .map(function (p) { return p.text || ""; }).join("").trim();
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = String(err.message || err);
+      }
+    }
+    if (lastErr) {
+      if (status) status.textContent = "Gemini failed: " + lastErr + " — Use Show to verify key starts with AIza, then Save & Test again.";
+      return { ok: false, error: lastErr, model: usedModel };
+    }
+    if (usedModel !== s.model) {
+      saveSettings({ model: usedModel });
+      const modelEl = document.getElementById("geminiModel");
+      if (modelEl) modelEl.value = usedModel;
+    }
+    if (status) {
+      status.textContent = "Gemini working ✓ (" + usedModel + ")" + (okText ? (" — " + okText.slice(0, 40)) : "");
+    }
+    return { ok: true, model: usedModel, reply: okText };
   }
 
   function parseChat(raw) {
@@ -2007,7 +2210,7 @@ textarea{resize:vertical;min-height:56px}
         return (
           '<div class="meal">' +
           thumb +
-          "<div><b>" + escapeHtml(m.items.map(function (i) { return i.detail; }).join(", ")) + "</b>" +
+          "<div><b>" + escapeHtml(m.items.map(function (i) { return foodDisplayName(i); }).join(", ")) + "</b>" +
           '<div class="meta">' + formatTime(m.at) + " · " + (m.source || "log") +
           (function () {
             var mp = Math.round((m.items || []).reduce(function (a, i) { return a + estimateItemProtein(i); }, 0));
@@ -2205,7 +2408,10 @@ textarea{resize:vertical;min-height:56px}
       if (i.carbs != null) macroBits.push("C " + i.carbs + "g");
       if (i.fat != null) macroBits.push("F " + i.fat + "g");
       body +=
-        '<div class="itemrow"><div><div>' + escapeHtml(i.detail) + "</div>" +
+        '<div class="itemrow"><div><div><b>' + escapeHtml(foodDisplayName(i)) + "</b></div>" +
+        (i.detail && i.detail !== foodDisplayName(i)
+          ? '<div class="tiny">' + escapeHtml(i.detail) + "</div>"
+          : "") +
         (macroBits.length ? '<div class="tiny">' + escapeHtml(macroBits.join(" · ")) + "</div>" : "") +
         (i.warn ? '<div class="tiny">' + escapeHtml(i.warn) + "</div>" : "") +
         gradeBadge(i.grade) +
@@ -2280,46 +2486,59 @@ textarea{resize:vertical;min-height:56px}
     };
   }
 
-  function parseWorkoutImage(dataUrl) {
+  function parseWorkoutImage(dataUrl, userNote) {
     const s = loadSettings();
     if (!s.geminiKey || !s.useLlm) {
-      return Promise.resolve(localEstimateWorkout("strength training 45 min", "lifting"));
+      var local = localEstimateWorkout((userNote || "") + " strength training 45 min", "lifting");
+      if (userNote) local.notes = String(userNote).trim();
+      return Promise.resolve(local);
     }
     const body = bodyMetrics();
-    const model = encodeURIComponent(migrateGeminiModel(s.model || "gemini-2.5-flash"));
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+    const modelsTry = [];
+    const preferred = migrateGeminiModel(s.model || "gemini-3.5-flash");
+    modelsTry.push(preferred);
+    ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"].forEach(function (m) {
+      if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
+    });
     const meta = "Body weight kg: " + (body.weightKg != null ? body.weightKg : "unknown") +
       ". Sex: " + (body.sex || "unknown") + ". Age: " + (body.ageYears != null ? body.ageYears : "unknown") + ".";
+    const noteBit = userNote ? ("\nUser note: " + String(userNote).trim() + "\n") : "";
     const prompt =
       "You read a handwritten or printed personal trainer workout plan photo.\n" +
-      "Return ONLY JSON (no markdown) with keys: name (short title), kind (lifting|cardio|mixed), durationMin (number), estimateKcal (conservative total session burn), exercises (array of {name, detail, sets, reps, durationMin}), notes (short).\n" +
-      "Rules: be conservative on estimateKcal; strength sessions are usually 150–450 kcal for ~45–75 min; do not invent cardio-level burns for lifting; include every exercise you can read; sets/reps as numbers or null; " + meta;
+      "Return ONLY JSON (no markdown) with keys: name (short title for the set), kind (lifting|cardio|mixed), durationMin (number), estimateKcal (conservative total session burn), exercises (array of {name, detail, sets, reps, durationMin}), notes (short).\n" +
+      "Rules: be conservative on estimateKcal; strength sessions are usually 150–450 kcal for ~45–75 min; do not invent cardio-level burns for lifting; include every exercise you can read; sets/reps as numbers or null; " + meta + noteBit;
     const pure = String(dataUrl || "");
     const comma = pure.indexOf(",");
     const b64 = comma >= 0 ? pure.slice(comma + 1) : pure;
     const mime = (pure.match(/^data:([^;]+);/) || [])[1] || "image/jpeg";
-    return fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{
-          role: "user",
-          parts: [
-            { text: prompt },
-            { inlineData: { mimeType: mime, data: b64 } }
-          ]
-        }],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json"
-        }
-      })
-    }).then(function (res) {
-      return res.json().then(function (data) {
-        if (!res.ok) throw new Error((data && data.error && data.error.message) || ("Gemini HTTP " + res.status));
-        return data;
+
+    function postModel(modelName) {
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(modelName) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            role: "user",
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: mime, data: b64 } }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: "application/json"
+          }
+        })
+      }).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error((data && data.error && data.error.message) || ("Gemini HTTP " + res.status));
+          return data;
+        });
       });
-    }).then(function (data) {
+    }
+
+    function parseResponse(data) {
       const rawText = (((data.candidates || [])[0] || {}).content || {}).parts
         ? data.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("")
         : "";
@@ -2333,19 +2552,32 @@ textarea{resize:vertical;min-height:56px}
       var kind = parsed.kind === "cardio" || parsed.kind === "mixed" ? parsed.kind : "lifting";
       var estimate = Math.max(0, Math.round(+parsed.estimateKcal || 0));
       if (!estimate) {
-        var fallback = localEstimateWorkout(parsed.name || "workout", kind);
+        var fallback = localEstimateWorkout(parsed.name || userNote || "workout", kind);
         estimate = fallback.estimateKcal;
       }
+      var name = String(parsed.name || "").trim();
+      if (!name && userNote) name = String(userNote).trim().slice(0, 48);
+      if (!name) name = "Workout";
       return {
-        name: String(parsed.name || "Workout").trim() || "Workout",
+        name: name,
         kind: kind,
         durationMin: parsed.durationMin != null && !isNaN(+parsed.durationMin) ? Math.max(0, Math.round(+parsed.durationMin)) : null,
         estimateKcal: estimate,
         defaultExtraKcal: suggestedWorkoutExtra(estimate, kind),
         exercises: Array.isArray(parsed.exercises) ? parsed.exercises : [],
-        notes: String(parsed.notes || "").trim()
+        notes: String(parsed.notes || userNote || "").trim()
       };
-    });
+    }
+
+    function tryAt(i, lastErr) {
+      if (i >= modelsTry.length) {
+        return Promise.reject(lastErr || new Error("Gemini workout parse failed"));
+      }
+      return postModel(modelsTry[i]).then(parseResponse).catch(function (err) {
+        return tryAt(i + 1, err);
+      });
+    }
+    return tryAt(0, null);
   }
 
   function logWorkoutSession(opts) {
@@ -2379,23 +2611,35 @@ textarea{resize:vertical;min-height:56px}
     const extraDefault = draft.defaultExtraKcal != null
       ? draft.defaultExtraKcal
       : suggestedWorkoutExtra(draft.estimateKcal, draft.kind);
-    const exList = (draft.exercises || []).slice(0, 12).map(function (ex) {
-      var bits = [];
-      if (ex.sets) bits.push(ex.sets + "×");
-      if (ex.reps) bits.push(String(ex.reps));
-      if (ex.durationMin) bits.push(ex.durationMin + "m");
-      return "<div class='itemrow'><div>" + escapeHtml(ex.name || "Exercise") +
-        (ex.detail ? (" <span class='tiny'>" + escapeHtml(ex.detail) + "</span>") : "") +
-        "</div><b>" + escapeHtml(bits.join(" ") || "—") + "</b></div>";
-    }).join("");
+    const exerciseLines = (draft.exercises || []).slice(0, 16).map(function (ex) {
+      var bits = [String(ex.name || "Exercise").trim()];
+      if (ex.detail) bits.push(String(ex.detail).trim());
+      var sr = [];
+      if (ex.sets) sr.push(String(ex.sets) + "x");
+      if (ex.reps) sr.push(String(ex.reps));
+      if (ex.durationMin) sr.push(ex.durationMin + "m");
+      if (sr.length) bits.push(sr.join(""));
+      return bits.join(" | ");
+    }).join("\n");
+    const kind = draft.kind === "cardio" || draft.kind === "mixed" ? draft.kind : "lifting";
     openSheet(
       '<p class="eyebrow">Workout set</p>' +
-      '<h2 style="margin:4px 0 8px">' + escapeHtml(draft.name || "Workout") + "</h2>" +
-      '<p class="muted">Kind: <b>' + escapeHtml(draft.kind || "lifting") + "</b>" +
-      (draft.durationMin ? (" · ~" + draft.durationMin + " min") : "") +
-      " · full estimate <b>" + (draft.estimateKcal || 0) + " kcal</b></p>" +
+      '<h2 style="margin:4px 0 8px">Confirm plan</h2>' +
+      '<label class="tiny" style="display:block">Title</label>' +
+      '<input type="text" id="woNameInput" value="' + escapeHtml(draft.name || "Workout") + '" placeholder="e.g. Upper A / Hyde day" />' +
+      '<label class="tiny" style="display:block;margin-top:8px">Kind</label>' +
+      '<select id="woKindSelect">' +
+      '<option value="lifting"' + (kind === "lifting" ? " selected" : "") + '>Lifting</option>' +
+      '<option value="cardio"' + (kind === "cardio" ? " selected" : "") + '>Cardio</option>' +
+      '<option value="mixed"' + (kind === "mixed" ? " selected" : "") + '>Mixed</option>' +
+      '</select>' +
+      '<p class="muted" style="margin-top:8px">Full estimate <b>' + (draft.estimateKcal || 0) + " kcal</b>" +
+      (draft.durationMin ? (" · ~" + draft.durationMin + " min") : "") + "</p>" +
       '<div class="note">Apple Move today is <b>' + (moveNow || "—") + "</b>. We only add a <b>conservative extra</b> Move likely missed — not the full estimate again.</div>" +
-      (exList || "<p class='tiny'>No exercises parsed — you can still save the set.</p>") +
+      '<label class="tiny" style="display:block;margin-top:8px">Optional note</label>' +
+      '<input type="text" id="woNoteInput" value="' + escapeHtml(draft.notes || "") + '" placeholder="e.g. upper A, 55 min" />' +
+      '<label class="tiny" style="display:block;margin-top:8px">Exercises (one per line: Name | detail | 3x10)</label>' +
+      '<textarea id="woExInput" rows="5" style="width:100%">' + escapeHtml(exerciseLines) + "</textarea>" +
       '<label class="tiny" style="display:block;margin-top:10px">Extra kcal to count today (on top of Move)</label>' +
       '<input type="number" id="woExtraInput" inputmode="numeric" value="' + extraDefault + '" />' +
       '<div class="chips" style="margin-top:8px" id="woExtraChips"></div>' +
@@ -2419,8 +2663,34 @@ textarea{resize:vertical;min-height:56px}
       const v = document.getElementById("woExtraInput").value;
       return v === "" || isNaN(+v) ? 0 : Math.max(0, Math.round(+v));
     }
+    function parseExerciseLines(text) {
+      return String(text || "").split(/\n+/).map(function (line) {
+        line = line.trim();
+        if (!line) return null;
+        var parts = line.split("|").map(function (p) { return p.trim(); }).filter(Boolean);
+        var name = parts[0] || "Exercise";
+        var detail = parts[1] || "";
+        var sets = null, reps = null, durationMin = null;
+        var sr = parts[2] || "";
+        var xm = sr.match(/(\d+)\s*[x×]\s*(\d+)/i);
+        var dm = sr.match(/(\d+)\s*m\b/i);
+        if (xm) { sets = +xm[1]; reps = +xm[2]; }
+        if (dm) durationMin = +dm[1];
+        return { name: name, detail: detail, sets: sets, reps: reps, durationMin: durationMin };
+      }).filter(Boolean);
+    }
+    function applyFormToDraft() {
+      draft.name = (document.getElementById("woNameInput").value || "").trim() || "Workout";
+      draft.kind = document.getElementById("woKindSelect").value || "lifting";
+      if (draft.kind !== "cardio" && draft.kind !== "mixed") draft.kind = "lifting";
+      draft.notes = (document.getElementById("woNoteInput").value || "").trim();
+      draft.exercises = parseExerciseLines(document.getElementById("woExInput").value);
+      // Library default stays formula-based (Move-safe %). Today's log uses readExtra().
+      draft.defaultExtraKcal = suggestedWorkoutExtra(draft.estimateKcal, draft.kind);
+      return draft;
+    }
     function saveSet() {
-      draft.defaultExtraKcal = readExtra();
+      applyFormToDraft();
       return upsertWorkoutSet(draft);
     }
     document.getElementById("sheetOk").onclick = function () {
@@ -2431,7 +2701,8 @@ textarea{resize:vertical;min-height:56px}
         name: saved.name,
         estimateKcal: saved.estimateKcal,
         extraKcal: extra,
-        kind: saved.kind
+        kind: saved.kind,
+        note: saved.notes
       });
       closeSheet();
       renderToday();
@@ -2446,13 +2717,15 @@ textarea{resize:vertical;min-height:56px}
     var logOnly = document.getElementById("sheetLogOnly");
     if (logOnly) {
       logOnly.onclick = function () {
+        applyFormToDraft();
         const extra = readExtra();
         logWorkoutSession({
           setId: opts.existingId || draft.id || null,
           name: draft.name,
           estimateKcal: draft.estimateKcal,
           extraKcal: extra,
-          kind: draft.kind
+          kind: draft.kind,
+          note: draft.notes
         });
         closeSheet();
         renderToday();
@@ -2524,40 +2797,69 @@ textarea{resize:vertical;min-height:56px}
 
   function handleWorkoutPhotoFile(file) {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function () {
-      const dataUrl = reader.result;
-      toast("Reading workout plan…");
-      // shrink for upload
-      const img = new Image();
-      img.onload = function () {
-        const max = 1280;
-        let w = img.width;
-        let h = img.height;
-        if (w > max || h > max) {
-          const s = Math.min(max / w, max / h);
-          w = Math.round(w * s);
-          h = Math.round(h * s);
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        const small = canvas.toDataURL("image/jpeg", 0.75);
-        parseWorkoutImage(small).then(function (draft) {
-          openWorkoutSetConfirm(draft, {});
-        }).catch(function (err) {
-          toast(err.message || "Couldn’t read plan");
-          const fallback = localEstimateWorkout("strength 45 min", "lifting");
-          openWorkoutSetConfirm(fallback, {});
-        });
-      };
-      img.onerror = function () {
-        toast("Couldn’t load photo");
-      };
-      img.src = dataUrl;
+    // Optional short note before / with the photo (plan: "upper A", duration)
+    openSheet(
+      '<p class="eyebrow">Workout photo</p>' +
+      '<h2 style="margin:4px 0 8px">Add trainer plan</h2>' +
+      '<p class="muted">Optional note helps naming (e.g. Upper A, 55 min). Then we read the photo.</p>' +
+      '<label class="tiny">Note (optional)</label>' +
+      '<input type="text" id="woImportNote" placeholder="e.g. upper A" />' +
+      '<button class="btn primary" id="sheetOk" type="button">Read photo</button>' +
+      '<button class="btn ghost" id="sheetNo" type="button">Cancel</button>'
+    );
+    document.getElementById("sheetNo").onclick = function () {
+      closeSheet();
+      var inp = document.getElementById("workoutPhotoInput");
+      if (inp) inp.value = "";
     };
-    reader.readAsDataURL(file);
+    document.getElementById("sheetOk").onclick = function () {
+      const note = (document.getElementById("woImportNote").value || "").trim();
+      closeSheet();
+      const reader = new FileReader();
+      reader.onload = function () {
+        const dataUrl = reader.result;
+        toast("Reading workout plan…");
+        const img = new Image();
+        img.onload = function () {
+          const max = 1280;
+          let w = img.width;
+          let h = img.height;
+          if (w > max || h > max) {
+            const s = Math.min(max / w, max / h);
+            w = Math.round(w * s);
+            h = Math.round(h * s);
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          const small = canvas.toDataURL("image/jpeg", 0.75);
+          // Tiny thumb for the library card
+          const tw = 160;
+          const th = Math.max(1, Math.round(h * (tw / w)));
+          const tcan = document.createElement("canvas");
+          tcan.width = tw;
+          tcan.height = th;
+          tcan.getContext("2d").drawImage(img, 0, 0, tw, th);
+          const thumb = tcan.toDataURL("image/jpeg", 0.6);
+          parseWorkoutImage(small, note).then(function (draft) {
+            draft.photoThumb = thumb;
+            if (note && (!draft.notes || draft.notes === "Local estimate (no Gemini)")) draft.notes = note;
+            if (note && /^Workout$/i.test(draft.name)) draft.name = note.slice(0, 48);
+            openWorkoutSetConfirm(draft, {});
+          }).catch(function (err) {
+            toast(err.message || "Couldn’t read plan");
+            const fallback = localEstimateWorkout(note || "strength 45 min", "lifting");
+            fallback.photoThumb = thumb;
+            if (note) { fallback.notes = note; fallback.name = note.slice(0, 48); }
+            openWorkoutSetConfirm(fallback, {});
+          });
+        };
+        img.onerror = function () { toast("Couldn’t load photo"); };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    };
   }
 
   function openMoveEditor() {
@@ -2763,32 +3065,46 @@ textarea{resize:vertical;min-height:56px}
   document.getElementById("logBtn").onclick = async function () {
     const raw = document.getElementById("text").value;
     const btn = document.getElementById("logBtn");
-    const s = loadSettings();
-    if (s.geminiKey && s.useLlm) {
-      btn.disabled = true;
-      btn.textContent = "Asking Gemini…";
-    } else {
-      toast("Tip: add a Gemini key in Setup so protein comes from AI for anything you type");
+    if (!String(raw || "").trim()) {
+      toast("Type a meal first");
+      return;
     }
+    // Parse always goes through Gemini: health-check first so a dead key never
+    // silently falls back to the built-in catalog (0 kcal / “couldn’t match”).
+    const s = syncAiSettingsFromForm();
+    if (!s.useLlm) {
+      toast("Turn on “Use Gemini for chat” in Setup — Parse needs AI.");
+      return;
+    }
+    if (!s.geminiKey) {
+      toast("Add a Gemini key in Setup, then Parse again.");
+      return;
+    }
+    btn.disabled = true;
     try {
+      btn.textContent = "Testing Gemini…";
+      const health = await testGeminiHealth({ quiet: true });
+      if (!health.ok) {
+        toast("Gemini not working — fix key in Setup before parsing. " + (health.error || ""));
+        return;
+      }
+      btn.textContent = "Asking Gemini…";
       const parsed = await parseChatSmart(raw);
-      if (parsed.llmError) toast(parsed.llmError);
-      if (parsed.unknown && parsed.unknown.length && (!parsed.items || !parsed.items.length)) {
-        toast("Couldn’t parse that. Add a Gemini key in Setup for free-form meals.");
+      const fromGemini = parsed.sourceNote === "gemini";
+      if (!fromGemini || !(parsed.items && parsed.items.length)) {
+        toast(parsed.llmError || "Gemini did not return foods — not opening confirm.");
+        return;
       }
-      const fromGemini = parsed.sourceNote && parsed.sourceNote.indexOf("gemini") >= 0;
-      if (fromGemini) {
-        const miss = (parsed.items || []).filter(function (i) { return i.protein == null || isNaN(+i.protein); });
-        if (miss.length) toast("Gemini missed protein on " + miss.length + " item(s) — check confirm sheet");
-      }
+      const miss = parsed.items.filter(function (i) { return i.protein == null || isNaN(+i.protein); });
+      if (miss.length) toast("Gemini missed protein on " + miss.length + " item(s) — check confirm sheet");
       confirmMeal({
         items: parsed.items,
         unknown: parsed.unknown,
-        source: fromGemini ? "chat-ai" : "chat"
+        source: "chat-ai"
       });
     } finally {
       btn.disabled = false;
-      btn.textContent = "Parse & confirm";
+      btn.textContent = "Parse with Gemini";
     }
   };
 
@@ -2797,7 +3113,7 @@ textarea{resize:vertical;min-height:56px}
     // Only "Remove key" clears it on purpose.
     var typed = document.getElementById("geminiKey").value.trim();
     var patch = {
-      model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
+      model: document.getElementById("geminiModel").value.trim() || "gemini-3.5-flash",
       useLlm: document.getElementById("useLlm").checked
     };
     if (typed) patch.geminiKey = typed;
@@ -2821,76 +3137,14 @@ textarea{resize:vertical;min-height:56px}
   };
 
   document.getElementById("testAiBtn").onclick = async function () {
-    // Save form first; blank key field keeps whatever is already stored.
-    var typed = document.getElementById("geminiKey").value.trim();
-    var patch = {
-      model: document.getElementById("geminiModel").value.trim() || "gemini-2.5-flash",
-      useLlm: document.getElementById("useLlm").checked
-    };
-    if (typed) patch.geminiKey = typed;
-    saveSettings(patch);
-    renderSetupAi();
-    const s = loadSettings();
-    const status = document.getElementById("aiTestStatus");
+    syncAiSettingsFromForm();
     const btn = document.getElementById("testAiBtn");
-    if (!s.geminiKey) {
-      if (status) status.textContent = "No key saved — paste a key from Google AI Studio first.";
-      toast("Paste a Gemini key first");
-      return;
-    }
-    if (s.geminiKey.indexOf("AIza") !== 0) {
-      if (status) status.textContent = "This key does not look like a Gemini API key (usually starts with AIza). Re-copy from AI Studio.";
-    }
     btn.disabled = true;
     btn.textContent = "Testing…";
-    if (status) status.textContent = "Calling Gemini…";
     try {
-      const modelsTry = [];
-      const preferred = migrateGeminiModel(s.model || "gemini-2.5-flash");
-      modelsTry.push(preferred);
-      ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"].forEach(function (m) {
-        if (modelsTry.indexOf(m) < 0) modelsTry.push(m);
-      });
-      let lastErr = null;
-      let okText = "";
-      let usedModel = preferred;
-      for (let i = 0; i < modelsTry.length; i++) {
-        usedModel = modelsTry[i];
-        if (status) status.textContent = "Calling " + usedModel + "…";
-        const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(usedModel) + ":generateContent?key=" + encodeURIComponent(s.geminiKey);
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: "Reply with exactly: OK" }] }],
-            generationConfig: { temperature: 0, maxOutputTokens: 16 }
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          lastErr = (data && data.error && data.error.message) || ("HTTP " + res.status);
-          // Invalid key — no point trying other models
-          if (/API key|API_KEY|permission|403|401/i.test(lastErr)) break;
-          continue;
-        }
-        okText = ((((data.candidates || [])[0] || {}).content || {}).parts || [])
-          .map(function (p) { return p.text || ""; }).join("").trim();
-        lastErr = null;
-        break;
-      }
-      if (lastErr) throw new Error(lastErr);
-      // Persist working model
-      if (usedModel !== s.model) {
-        saveSettings({ model: usedModel });
-        const modelEl = document.getElementById("geminiModel");
-        if (modelEl) modelEl.value = usedModel;
-      }
-      if (status) status.textContent = "Gemini working ✓ (" + usedModel + ")" + (okText ? (" — " + okText.slice(0, 40)) : "");
-      toast("Gemini is working");
-    } catch (err) {
-      const msg = String(err.message || err);
-      if (status) status.textContent = "Gemini failed: " + msg + " — Use Show to verify key starts with AIza, then Save & Test again.";
-      toast("Gemini failed — see status under Test");
+      const health = await testGeminiHealth({});
+      if (health.ok) toast("Gemini is working");
+      else toast("Gemini failed — see status under Test");
     } finally {
       btn.disabled = false;
       btn.textContent = "Test Gemini";
@@ -2898,7 +3152,7 @@ textarea{resize:vertical;min-height:56px}
   };
 
   document.getElementById("clearAiBtn").onclick = function () {
-    saveSettings({ geminiKey: "", model: "gemini-2.5-flash", useLlm: true });
+    saveSettings({ geminiKey: "", model: "gemini-3.5-flash", useLlm: true });
     renderSetupAi();
     const st = document.getElementById("aiTestStatus");
     if (st) st.textContent = "";
@@ -3264,17 +3518,43 @@ textarea{resize:vertical;min-height:56px}
     if (e.target.id === "sheet") closeSheet();
   });
 
-  // service worker — force update so Home Screen / Safari drop stale shells (e.g. duplicate Paste)
+  // service worker — force update so Home Screen drops stale shells
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./sw.js").then(function (reg) {
+    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).then(function (reg) {
       try { reg.update(); } catch (e) {}
     }).catch(function () {});
     var refreshing = false;
-    navigator.serviceWorker.addEventListener("controllerchange", function () {
+    function reloadOnce() {
       if (refreshing) return;
       refreshing = true;
       location.reload();
+    }
+    navigator.serviceWorker.addEventListener("controllerchange", reloadOnce);
+    navigator.serviceWorker.addEventListener("message", function (ev) {
+      if (ev.data && ev.data.type === "SNAPCAL_SW_UPDATED") reloadOnce();
     });
+  }
+
+  var forceRefreshBtn = document.getElementById("forceRefreshBtn");
+  if (forceRefreshBtn) {
+    forceRefreshBtn.onclick = function () {
+      forceRefreshBtn.disabled = true;
+      forceRefreshBtn.textContent = "Refreshing…";
+      toast("Clearing cache and reloading…");
+      var done = function () { location.reload(true); };
+      if (!("serviceWorker" in navigator)) {
+        done();
+        return;
+      }
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all(regs.map(function (r) { return r.unregister(); }));
+      }).then(function () {
+        if (!window.caches || !caches.keys) return;
+        return caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        });
+      }).then(done).catch(done);
+    };
   }
 
   ensureMoveDefaults();
