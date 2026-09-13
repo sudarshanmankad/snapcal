@@ -721,7 +721,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v45 · Label photo → Gemini reads Nutrition Facts — Force refresh if Label still asks you to type kcal.";
+    if (ver) ver.textContent = "App build: v46 · Fixed Label prompt syntax (buttons work again) — Force refresh if still stuck.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -2617,7 +2617,7 @@ textarea{resize:vertical;min-height:56px}
     const prompt =
       "You read a packaged food nutrition facts / label photo.\n" +
       "Return ONLY JSON (no markdown) with keys: name (product name if visible, else short description), brand (string or null), " +
-      "servingSize (text like \\"1 bar (40g)\\" or null), kcalPerServing (number — Calories per serving from the label), " +
+      "servingSize (text like '1 bar (40g)' or null), kcalPerServing (number — Calories per serving from the label), " +
       "protein (grams per serving, number or null), carbs (grams per serving, number or null), fat (grams per serving, number or null), " +
       "notes (short, e.g. if label is blurry).\n" +
       "Rules: read the Nutrition Facts panel carefully; kcalPerServing is required when calories are visible; " +
