@@ -1,0 +1,23 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "Personal calorie tracker PWA for iPhone Home Screen.",
+  "main": "sw.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sudarshanmankad/snapcal.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sudarshanmankad/snapcal/issues"
+  },
+  "homepage": "https://github.com/sudarshanmankad/snapcal#readme",
+  "dependencies": {
+    "puppeteer-core": "^25.10.0"
+  }
+}
