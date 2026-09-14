@@ -105,6 +105,20 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 @media (prefers-reduced-motion:reduce){
   .mode-burn .mode-icon svg,.mode-bulk .mode-icon svg,.mode-fat .mode-icon svg{animation:none}
 }
+
+.week-trend{margin:10px 0 4px;padding:10px 12px;border-radius:14px;background:#fff;border:1px solid #f0e7dd}
+.week-trend .wt-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+.week-trend .wt-title{margin:0;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#7a7168}
+.week-trend .wt-sum{margin:0;font-size:12px;font-weight:650;color:#1c1612}
+.week-bars{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;height:72px}
+.week-bars .wt-col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;min-width:0;height:100%}
+.week-bars .wt-stack{flex:1;width:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}
+.week-bars .wt-food,.week-bars .wt-burn{display:block;width:100%;border-radius:4px 4px 2px 2px;min-height:2px}
+.week-bars .wt-food{background:#2f6f5e}
+.week-bars .wt-burn{background:#e45a3c;opacity:.85}
+.week-bars .wt-dow{font-size:10px;font-weight:700;color:#7a7168}
+.week-bars .wt-col.empty .wt-food,.week-bars .wt-col.empty .wt-burn{background:#efe6dc;opacity:.7}
+.wo-chip-hint{margin:4px 0 0;font-size:11px;color:#7a7168}
 .cal-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 10px}
 .cal-stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;text-align:center}
 .cal-stat .big{font-size:22px}
@@ -417,6 +431,7 @@ textarea{resize:vertical;min-height:56px}
       <p class="big" id="calTitle" style="flex:1;text-align:center;margin:0">—</p>
       <button type="button" class="chip ghost" id="calNext" aria-label="Next month">›</button>
     </div>
+    <div class="week-trend" id="weekTrend"></div>
     <div class="cal-stats" id="calStats"></div>
     <div class="cal-breakdown" id="calBreakdown"></div>
     <div class="cal-grid" id="calGrid" style="margin-top:12px"></div>
@@ -816,7 +831,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v56 · Centered burn icon — Force refresh if flame still sits top-left.";
+    if (ver) ver.textContent = "App build: v57 · One-tap workouts · weekly trend · clearer errors — Force refresh.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -2180,7 +2195,7 @@ textarea{resize:vertical;min-height:56px}
   function applyClipboardMoveText(text, quiet) {
     const parsed = parseMovePayload(text);
     if (!parsed) {
-      if (!quiet) toast("No Move on clipboard yet — wait for Automation, or run SnapCal Move once from Shortcuts.");
+      if (!quiet) toast("Nothing useful on the clipboard — run your Move Shortcut first, then tap Update.");
       return false;
     }
     const n = parsed.n;
@@ -2247,13 +2262,13 @@ textarea{resize:vertical;min-height:56px}
 
   function tryClipboardMove(quiet) {
     if (!navigator.clipboard || !navigator.clipboard.readText) {
-      if (!quiet) toast("This browser can’t read the clipboard automatically.");
+      if (!quiet) toast("Clipboard read isn’t available here — use Safari Home Screen SnapCal, then Allow Paste.");
       return Promise.resolve(false);
     }
     return navigator.clipboard.readText().then(function (text) {
       return applyClipboardMoveText(text, quiet);
     }).catch(function () {
-      if (!quiet) toast("iPhone needs Allow Paste once — tap Allow, then Update again.");
+      if (!quiet) toast("Paste blocked — tap Allow Paste when iPhone asks, then Update again.");
       return false;
     });
   }
@@ -2372,7 +2387,7 @@ textarea{resize:vertical;min-height:56px}
     document.getElementById("count").textContent = (d.meals || []).length;
     const list = document.getElementById("meals");
     if (!d.meals.length) {
-      list.innerHTML = "<p class='muted'>No meals yet. Chat or Snap, then confirm.</p>";
+      list.innerHTML = "<p class='muted'>No meals yet — type below or Snap a label.</p>";
     } else {
       list.innerHTML = d.meals.slice().reverse().map(function (m) {
         const thumb = m.photo
@@ -2472,6 +2487,53 @@ textarea{resize:vertical;min-height:56px}
       "</div>";
   }
 
+
+  function weekTrendHtml() {
+    var body = bodyMetrics();
+    var today = new Date();
+    var dows = ["S", "M", "T", "W", "T", "F", "S"];
+    var cols = [];
+    var foodSum = 0, burnSum = 0, n = 0;
+    var maxV = 1;
+    var days = [];
+    for (var i = 6; i >= 0; i--) {
+      var dt = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+      var key = ymdKey(dt.getFullYear(), dt.getMonth(), dt.getDate());
+      var d = db.days[key];
+      var food = d ? eatenKcal(d) : 0;
+      var move = d && d.move != null ? +d.move : 0;
+      var extra = d ? syncWorkoutAdj(Object.assign({}, d)) : 0;
+      var burn = (body.bmr != null && move > 0) ? (body.bmr + move + extra) : 0;
+      if (food > 0 || burn > 0) { foodSum += food; burnSum += burn; n++; }
+      maxV = Math.max(maxV, food, burn);
+      days.push({ key: key, dow: dows[dt.getDay()], food: food, burn: burn });
+    }
+    var scale = maxV || 1;
+    var bars = days.map(function (x) {
+      var fh = x.food ? Math.max(4, Math.round((x.food / scale) * 52)) : 2;
+      var bh = x.burn ? Math.max(4, Math.round((x.burn / scale) * 52)) : 2;
+      var empty = !(x.food || x.burn);
+      return '<div class="wt-col' + (empty ? " empty" : "") + '" title="' + x.key + '">' +
+        '<div class="wt-stack">' +
+        '<i class="wt-food" style="height:' + fh + 'px"></i>' +
+        '<i class="wt-burn" style="height:' + bh + 'px"></i>' +
+        '</div><span class="wt-dow">' + x.dow + "</span></div>";
+    }).join("");
+    var sum = n
+      ? ("7-day avg food " + Math.round(foodSum / n) + " · burn " + Math.round(burnSum / Math.max(1, days.filter(function(x){return x.burn;}).length || n)))
+      : "Log meals + Move to see the week";
+    // clearer avg burn only over days with burn
+    var burnDays = days.filter(function (x) { return x.burn > 0; }).length;
+    if (n) {
+      sum = "Avg food " + Math.round(foodSum / n);
+      if (burnDays) sum += " · avg burn " + Math.round(burnSum / burnDays);
+      sum += " · last 7 days";
+    }
+    return '<div class="wt-head"><p class="wt-title">This week</p><p class="wt-sum">' + sum + "</p></div>" +
+      '<div class="week-bars">' + bars + "</div>" +
+      '<p class="tiny" style="margin:8px 0 0">Green = food · Coral = burn</p>';
+  }
+
   function renderHistory() {
     ensureCalCursor();
     const y = calYear;
@@ -2521,6 +2583,8 @@ textarea{resize:vertical;min-height:56px}
 
     const burnt = counts.Burning || 0;
     const notBurnt = (counts.Maintain || 0) + (counts.Bulking || 0) + (counts.Fattening || 0);
+    const weekEl = document.getElementById("weekTrend");
+    if (weekEl) weekEl.innerHTML = weekTrendHtml();
     const stats = document.getElementById("calStats");
     if (stats) {
       stats.innerHTML =
@@ -2966,6 +3030,24 @@ textarea{resize:vertical;min-height:56px}
   }
 
 
+
+  function quickLogWorkoutSet(set) {
+    if (!set) return;
+    var extra = set.defaultExtraKcal != null
+      ? Math.max(0, Math.round(+set.defaultExtraKcal || 0))
+      : suggestedWorkoutExtra(set.estimateKcal, set.kind);
+    logWorkoutSession({
+      setId: set.id,
+      name: set.name,
+      estimateKcal: set.estimateKcal,
+      extraKcal: extra,
+      kind: set.kind,
+      note: set.notes || ""
+    });
+    renderToday();
+    toast("Logged " + (set.name || "workout") + " · +" + extra + " extra kcal");
+  }
+
   function logWorkoutSession(opts) {
     const d = day();
     if (!Array.isArray(d.workouts)) d.workouts = [];
@@ -3200,13 +3282,14 @@ textarea{resize:vertical;min-height:56px}
         chips.classList.add("hide");
       } else if (!sets.length) {
         chips.classList.remove("hide");
-        chips.innerHTML = '<span class="tiny">No sets yet — use Photo.</span>';
+        chips.innerHTML = '<span class="tiny">No saved plans yet — Photo a trainer sheet once, then tap to re-log.</span>';
       } else {
         chips.classList.remove("hide");
         chips.innerHTML = sets.slice(0, 8).map(function (s) {
+          var ex = s.defaultExtraKcal != null ? s.defaultExtraKcal : suggestedWorkoutExtra(s.estimateKcal, s.kind);
           return '<button type="button" class="chip" data-set="' + s.id + '">' + escapeHtml(s.name) +
-            '<span class="tiny"> · ' + (s.estimateKcal || 0) + " est</span></button>";
-        }).join("");
+            '<span class="tiny"> · +' + ex + "</span></button>";
+        }).join("") + '<p class="wo-chip-hint">Tap a plan to log it · Manage to edit</p>';
       }
     }
   }
@@ -3596,16 +3679,8 @@ textarea{resize:vertical;min-height:56px}
     const id = btn.getAttribute("data-set");
     const set = loadWorkoutSets().filter(function (s) { return s.id === id; })[0];
     if (!set) return;
-    openWorkoutSetConfirm({
-      id: set.id,
-      name: set.name,
-      kind: set.kind,
-      durationMin: set.durationMin,
-      estimateKcal: set.estimateKcal,
-      defaultExtraKcal: set.defaultExtraKcal != null ? set.defaultExtraKcal : suggestedWorkoutExtra(set.estimateKcal, set.kind),
-      exercises: set.exercises || [],
-      notes: set.notes || ""
-    }, { existingId: set.id });
+    // One tap = log today with saved extra. Edit plans via Manage.
+    quickLogWorkoutSet(set);
   };
 
   document.getElementById("workoutTodayList").onclick = function (e) {
@@ -3632,18 +3707,18 @@ textarea{resize:vertical;min-height:56px}
     const btn = document.getElementById("logBtn");
     const hasPhoto = !!chatPhotoData;
     if (!String(raw || "").trim() && !hasPhoto) {
-      toast("Type what you ate and/or snap a label photo");
+      toast("Add food text or a label photo, then Parse.");
       return;
     }
     // Parse always goes through Gemini: health-check first so a dead key never
     // silently falls back to the built-in catalog (0 kcal / “couldn’t match”).
     const s = syncAiSettingsFromForm();
     if (!s.useLlm) {
-      toast("Turn on “Use Gemini for chat” in Setup — Parse needs AI.");
+      toast("Turn on Gemini in Setup first — Parse needs AI.");
       return;
     }
     if (!s.geminiKey) {
-      toast("Add a Gemini key in Setup, then Parse again.");
+      toast("Add your Gemini API key in Setup, then Parse again.");
       return;
     }
     btn.disabled = true;
@@ -3651,14 +3726,14 @@ textarea{resize:vertical;min-height:56px}
       btn.textContent = "Testing Gemini…";
       const health = await testGeminiHealth({ quiet: true });
       if (!health.ok) {
-        toast("Gemini not working — fix key in Setup before parsing. " + (health.error || ""));
+        toast("Gemini key failed — open Setup, check the key starts with AIza, Save, then try again. " + (health.error || ""));
         return;
       }
       btn.textContent = hasPhoto ? "Reading label…" : "Asking Gemini…";
       const parsed = await parseChatSmart(raw, chatPhotoData);
       const fromGemini = parsed.sourceNote === "gemini";
       if (!fromGemini || !(parsed.items && parsed.items.length)) {
-        toast(parsed.llmError || "Gemini did not return foods — not opening confirm.");
+        toast(parsed.llmError || "Gemini didn’t recognize foods — retake/rephrase, or check the key in Setup.");
         return;
       }
       const miss = parsed.items.filter(function (i) { return i.protein == null || isNaN(+i.protein); });
@@ -3816,7 +3891,7 @@ textarea{resize:vertical;min-height:56px}
     }
     tryClipboardMove(false).then(function (ok) {
       if (ok) return; // true or "confirm"
-      toast("No Move on clipboard yet — wait for Automation, or use Setup → Run Shortcut in Shortcuts app.");
+      toast("Still no Move — open Shortcuts, run SnapCal Move (copies Active Energy), return here, tap Update.");
     });
   }
   var updToday = document.getElementById("updateMoveBtn");
