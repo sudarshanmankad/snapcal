@@ -73,7 +73,7 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 .mode-wait .mode-icon{color:#7a7168;background:#f7f2ec}
 
 .fuel-card{padding:10px 12px}
-.fuel-split{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-top:10px;padding-top:10px;border-top:1px solid #f0e6dc}
+.fuel-split{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid #f0e6dc}
 .burn-meta{margin:2px 0 0;font-size:11px;color:#7a7168;line-height:1.3}
 .burn-meter{display:flex;gap:4px;margin-top:8px;max-width:140px}
 .burn-meter i{flex:1;height:6px;border-radius:99px;background:#efe6dc;display:block}
@@ -84,8 +84,8 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 .fuel-card.mode-ok .burn-meter i.on{background:#2f6f5e}
 .fuel-card.mode-bulk .burn-meter i.on{background:#9a6b1f}
 .fuel-card.mode-fat .burn-meter i.on{background:#c44a3a}
-.fuel-card .mode-icon,.mode-icon{width:44px;height:44px;border-radius:12px}
-.fuel-card .mode-icon svg,.mode-icon svg{width:28px;height:28px}
+.fuel-card .mode-icon,.mode-icon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;overflow:hidden}
+.fuel-card .mode-icon svg,.mode-icon svg{width:26px;height:26px;display:block;margin:0;max-width:100%;max-height:100%}
 .burn-title{font-size:18px}
 .wo-card{padding:8px 10px}
 .wo-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -99,7 +99,7 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 @keyframes mode-flicker{0%,100%{transform:scale(1) translateY(0)}50%{transform:scale(1.06) translateY(-1px)}}
 @keyframes mode-flex{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
 @keyframes mode-soft{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
-.mode-burn .mode-icon svg{animation:mode-flicker 2.2s ease-in-out infinite;transform-origin:center bottom}
+.mode-burn .mode-icon svg{animation:mode-flicker 2.2s ease-in-out infinite;transform-origin:center center}
 .mode-bulk .mode-icon svg{animation:mode-flex 2.8s ease-in-out infinite}
 .mode-fat .mode-icon svg{animation:mode-soft 3.2s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){
@@ -816,7 +816,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v55 · Library mode icons (Bootstrap fire) — Force refresh if flame still looks wrong.";
+    if (ver) ver.textContent = "App build: v56 · Centered burn icon — Force refresh if flame still sits top-left.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
