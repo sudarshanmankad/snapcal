@@ -1,5 +1,5 @@
 /* SnapCal service worker — cache shell for Home Screen / offline reopen */
-const CACHE = "snapcal-v54-20260914-fuel-burn";
+const CACHE = "snapcal-v55-20260914-mode-icons";
 const ASSETS = [
   "./",
   "./index.html",
