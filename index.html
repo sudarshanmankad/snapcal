@@ -106,18 +106,21 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
   .mode-burn .mode-icon svg,.mode-bulk .mode-icon svg,.mode-fat .mode-icon svg{animation:none}
 }
 
-.week-trend{margin:10px 0 4px;padding:10px 12px;border-radius:14px;background:#fff;border:1px solid #f0e7dd}
-.week-trend .wt-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+.week-trend{margin:10px 0 4px;padding:12px;border-radius:14px;background:#fff;border:1px solid #f0e7dd}
 .week-trend .wt-title{margin:0;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#7a7168}
-.week-trend .wt-sum{margin:0;font-size:12px;font-weight:650;color:#1c1612}
-.week-bars{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;height:72px}
-.week-bars .wt-col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;min-width:0;height:100%}
-.week-bars .wt-stack{flex:1;width:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}
-.week-bars .wt-food,.week-bars .wt-burn{display:block;width:100%;border-radius:4px 4px 2px 2px;min-height:2px}
+.week-trend .wt-sum{margin:4px 0 10px;font-size:13px;font-weight:650;color:#1c1612;line-height:1.35}
+.week-bars{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:end;height:88px;width:100%}
+.week-bars .wt-col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;min-width:0;height:100%}
+.week-bars .wt-pair{display:flex;align-items:flex-end;justify-content:center;gap:3px;width:100%;height:64px}
+.week-bars .wt-food,.week-bars .wt-burn{
+  display:block;width:42%;max-width:14px;border-radius:5px 5px 2px 2px;align-self:flex-end;
+  min-height:3px;box-sizing:border-box;
+}
 .week-bars .wt-food{background:#2f6f5e}
-.week-bars .wt-burn{background:#e45a3c;opacity:.85}
-.week-bars .wt-dow{font-size:10px;font-weight:700;color:#7a7168}
-.week-bars .wt-col.empty .wt-food,.week-bars .wt-col.empty .wt-burn{background:#efe6dc;opacity:.7}
+.week-bars .wt-burn{background:#e45a3c}
+.week-bars .wt-col.empty .wt-food,.week-bars .wt-col.empty .wt-burn{background:#eadfd4;min-height:3px;height:3px !important}
+.week-bars .wt-dow{font-size:10px;font-weight:700;color:#7a7168;line-height:1}
+.week-trend .wt-legend{margin:8px 0 0;font-size:11px;color:#7a7168}
 .wo-chip-hint{margin:4px 0 0;font-size:11px;color:#7a7168}
 .cal-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 10px}
 .cal-stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;text-align:center}
@@ -831,7 +834,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v57 · One-tap workouts · weekly trend · clearer errors — Force refresh.";
+    if (ver) ver.textContent = "App build: v58 · Fixed week chart — Force refresh if History bars look broken.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -2492,8 +2495,7 @@ textarea{resize:vertical;min-height:56px}
     var body = bodyMetrics();
     var today = new Date();
     var dows = ["S", "M", "T", "W", "T", "F", "S"];
-    var cols = [];
-    var foodSum = 0, burnSum = 0, n = 0;
+    var foodSum = 0, burnSum = 0, foodDays = 0, burnDays = 0;
     var maxV = 1;
     var days = [];
     for (var i = 6; i >= 0; i--) {
@@ -2502,36 +2504,41 @@ textarea{resize:vertical;min-height:56px}
       var d = db.days[key];
       var food = d ? eatenKcal(d) : 0;
       var move = d && d.move != null ? +d.move : 0;
-      var extra = d ? syncWorkoutAdj(Object.assign({}, d)) : 0;
+      var extra = 0;
+      if (d) {
+        var tmp = { workouts: d.workouts, workoutAdj: d.workoutAdj };
+        extra = syncWorkoutAdj(tmp);
+      }
       var burn = (body.bmr != null && move > 0) ? (body.bmr + move + extra) : 0;
-      if (food > 0 || burn > 0) { foodSum += food; burnSum += burn; n++; }
+      if (food > 0) { foodSum += food; foodDays++; }
+      if (burn > 0) { burnSum += burn; burnDays++; }
       maxV = Math.max(maxV, food, burn);
       days.push({ key: key, dow: dows[dt.getDay()], food: food, burn: burn });
     }
     var scale = maxV || 1;
     var bars = days.map(function (x) {
-      var fh = x.food ? Math.max(4, Math.round((x.food / scale) * 52)) : 2;
-      var bh = x.burn ? Math.max(4, Math.round((x.burn / scale) * 52)) : 2;
       var empty = !(x.food || x.burn);
-      return '<div class="wt-col' + (empty ? " empty" : "") + '" title="' + x.key + '">' +
-        '<div class="wt-stack">' +
-        '<i class="wt-food" style="height:' + fh + 'px"></i>' +
-        '<i class="wt-burn" style="height:' + bh + 'px"></i>' +
-        '</div><span class="wt-dow">' + x.dow + "</span></div>";
+      var fh = x.food ? Math.max(6, Math.round((x.food / scale) * 58)) : 3;
+      var bh = x.burn ? Math.max(6, Math.round((x.burn / scale) * 58)) : 3;
+      return (
+        '<div class="wt-col' + (empty ? " empty" : "") + '" title="' + x.key +
+        (x.food || x.burn ? (" · food " + x.food + " / burn " + x.burn) : "") + '">' +
+        '<div class="wt-pair">' +
+        '<span class="wt-food" style="height:' + fh + 'px"></span>' +
+        '<span class="wt-burn" style="height:' + bh + 'px"></span>' +
+        '</div><span class="wt-dow">' + x.dow + "</span></div>"
+      );
     }).join("");
-    var sum = n
-      ? ("7-day avg food " + Math.round(foodSum / n) + " · burn " + Math.round(burnSum / Math.max(1, days.filter(function(x){return x.burn;}).length || n)))
-      : "Log meals + Move to see the week";
-    // clearer avg burn only over days with burn
-    var burnDays = days.filter(function (x) { return x.burn > 0; }).length;
-    if (n) {
-      sum = "Avg food " + Math.round(foodSum / n);
-      if (burnDays) sum += " · avg burn " + Math.round(burnSum / burnDays);
-      sum += " · last 7 days";
-    }
-    return '<div class="wt-head"><p class="wt-title">This week</p><p class="wt-sum">' + sum + "</p></div>" +
+    var bits = [];
+    if (foodDays) bits.push("Avg food " + Math.round(foodSum / foodDays));
+    if (burnDays) bits.push("avg burn " + Math.round(burnSum / burnDays));
+    var sum = bits.length ? (bits.join(" · ") + " · last 7 days") : "Log meals + Move to see the week";
+    return (
+      '<p class="wt-title">This week</p>' +
+      '<p class="wt-sum">' + sum + "</p>" +
       '<div class="week-bars">' + bars + "</div>" +
-      '<p class="tiny" style="margin:8px 0 0">Green = food · Coral = burn</p>';
+      '<p class="wt-legend">Green = food · Coral = burn</p>'
+    );
   }
 
   function renderHistory() {
