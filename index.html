@@ -43,14 +43,14 @@ body{
 main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom))}
 .brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:2px}
 .brand h1{margin:0;font-size:24px;letter-spacing:-0.03em}
-.eyebrow{margin:0;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase}
+.eyebrow{margin:0;color:#7a7168;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase}
 .card{background:var(--card);border:1px solid #f0e7dd;border-radius:16px;padding:10px 12px;margin:6px 0;box-shadow:0 1px 0 #fff inset}
 .card.compact{padding:8px 10px;margin:5px 0;border-radius:14px}
 .card.compact .big{font-size:17px}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .big{font-size:20px;font-weight:750;margin:0;letter-spacing:-0.02em;line-height:1.15}
-.muted{color:var(--muted);margin:0;font-size:11px;line-height:1.25;font-weight:650}
-.tiny{font-size:12px;color:var(--muted)}
+.muted{color:#7a7168;margin:0;font-size:11px;line-height:1.25;font-weight:650}
+.tiny{font-size:12px;color:#7a7168}
 .bar{height:6px;border-radius:999px;background:#efe6dc;overflow:hidden;margin-top:6px}
 .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--sage),var(--accent));border-radius:inherit;width:0%;transition:width .35s ease}
 .over .bar > i{background:var(--accent)}
@@ -59,7 +59,7 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 .mode-card .mode-icon svg{width:34px;height:34px;display:block}
 .mode-burn{background:linear-gradient(135deg,#fff4ec 0%,#ffe0c8 55%,#ffd2b0 100%);border-color:#f0c4a4}
 .mode-burn .mode-icon{color:#d84315;background:#fff6f0;box-shadow:0 0 0 1px #f5c4a855}
-.mode-burn .big{color:#b33a12}
+.mode-burn .big,.mode-burn .burn-title{color:#b33a12}
 .mode-bulk{background:linear-gradient(135deg,#fff9eb 0%,#ffe9b8 55%,#ffd98a 100%);border-color:#e8d090}
 .mode-bulk .mode-icon{color:#9a6b1f;background:#fffaf0}
 .mode-bulk .big{color:#7a5414}
@@ -70,7 +70,32 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 .mode-ok .mode-icon{color:#2f6f5e;background:#f4faf7}
 .mode-ok .big{color:#245245}
 .mode-wait{background:var(--card);border-color:#f0e7dd}
-.mode-wait .mode-icon{color:var(--muted);background:#f7f2ec}
+.mode-wait .mode-icon{color:#7a7168;background:#f7f2ec}
+
+.fuel-card{padding:10px 12px}
+.fuel-split{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-top:10px;padding-top:10px;border-top:1px solid #f0e6dc}
+.burn-meta{margin:2px 0 0;font-size:11px;color:#7a7168;line-height:1.3}
+.burn-meter{display:flex;gap:4px;margin-top:8px;max-width:140px}
+.burn-meter i{flex:1;height:6px;border-radius:99px;background:#efe6dc;display:block}
+.fuel-card.mode-burn .burn-meter i.on{background:#e45a3c}
+.fuel-card.mode-burn.burn-avg .burn-meter i.on{background:#e89a5c}
+.fuel-card.mode-burn.burn-good .burn-meter i.on{background:#e45a3c}
+.fuel-card.mode-burn.burn-strong .burn-meter i.on{background:#c62828}
+.fuel-card.mode-ok .burn-meter i.on{background:#2f6f5e}
+.fuel-card.mode-bulk .burn-meter i.on{background:#9a6b1f}
+.fuel-card.mode-fat .burn-meter i.on{background:#c44a3a}
+.fuel-card .mode-icon,.mode-icon{width:44px;height:44px;border-radius:12px}
+.fuel-card .mode-icon svg,.mode-icon svg{width:28px;height:28px}
+.burn-title{font-size:18px}
+.wo-card{padding:8px 10px}
+.wo-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.wo-card .wo-title{margin:0;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#7a7168}
+.wo-extra{margin:0;font-size:14px;font-weight:700;letter-spacing:-0.02em}
+.wo-card .chips.sm,.chips.sm{margin-top:6px}
+.wo-card .wo-list,.wo-list{margin-top:4px}
+.wo-card .wo-list .itemrow{padding:4px 0}
+.wo-card .wo-list .itemrow b{font-size:13px}
+.wo-card .wo-list .tiny{font-size:11px}
 @keyframes mode-flicker{0%,100%{transform:scale(1) translateY(0)}50%{transform:scale(1.06) translateY(-1px)}}
 @keyframes mode-flex{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
 @keyframes mode-soft{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
@@ -86,11 +111,11 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 .cal-stat.burn .big{color:#b33a12}
 .cal-stat.not .big{color:#a33a30}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.cal-dow{text-align:center;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.04em;padding:4px 0}
+.cal-dow{text-align:center;font-size:10px;font-weight:700;color:#7a7168;letter-spacing:0.04em;padding:4px 0}
 .cal-day{
   aspect-ratio:1;border-radius:12px;border:1px solid transparent;background:#f7f2ec;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-  font-size:12px;font-weight:700;color:var(--muted);min-height:40px;padding:2px;
+  font-size:12px;font-weight:700;color:#7a7168;min-height:40px;padding:2px;
   width:100%;margin:0;font:inherit;line-height:1.1;-webkit-appearance:none;appearance:none;
 }
 .cal-day.on{cursor:pointer;color:var(--ink)}
@@ -108,7 +133,7 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 .cal-day.fat{background:#ffd6d0;border-color:#f0b8b0;color:#a33a30}
 .cal-day.fat .dot{background:#c44a3a}
 .cal-legend{display:flex;flex-wrap:wrap;gap:8px 12px;margin-top:12px}
-.cal-legend span{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:650;color:var(--muted)}
+.cal-legend span{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:650;color:#7a7168}
 .cal-legend i{width:8px;height:8px;border-radius:99px;display:inline-block}
 .cal-legend i.burn{background:#d84315}
 .cal-legend i.ok{background:#2f6f5e}
@@ -124,7 +149,7 @@ button{border:0;background:none;color:inherit;cursor:pointer}
 .btn{display:block;width:100%;min-height:48px;border-radius:16px;font-weight:700;margin-top:8px}
 .primary{background:var(--accent);color:#fff}
 .light{background:#fff;border:1px solid var(--line)}
-.ghost{background:transparent;border:1px dashed var(--line);color:var(--muted)}
+.ghost{background:transparent;border:1px dashed var(--line);color:#7a7168}
 .danger{background:#fff;border:1px solid #f0cfc6;color:#a33}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chips.sm{gap:6px;margin-top:6px}
@@ -146,10 +171,10 @@ button{border:0;background:none;color:inherit;cursor:pointer}
   white-space:normal;overflow-wrap:anywhere;word-break:break-word;
 }
 .wo-ex-card .wo-ex-name:focus{outline:none;border-color:var(--line);background:#fff}
-.wo-ex-card .wo-del{flex:0 0 auto;min-height:32px;padding:4px 8px;font-size:12px;color:var(--muted);margin-top:2px}
+.wo-ex-card .wo-del{flex:0 0 auto;min-height:32px;padding:4px 8px;font-size:12px;color:#7a7168;margin-top:2px}
 .wo-ex-meta{display:grid;grid-template-columns:minmax(0,1.5fr) 72px 72px;gap:8px;margin-top:8px}
 .wo-ex-field{min-width:0}
-.wo-ex-field label{display:block;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);margin:0 0 3px}
+.wo-ex-field label{display:block;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#7a7168;margin:0 0 3px}
 .wo-ex-field input{
   width:100%;margin:0;padding:7px 8px;font-size:13px;line-height:1.25;min-height:36px;
   border:1px solid var(--line);border-radius:10px;background:#fff;
@@ -167,7 +192,7 @@ button{border:0;background:none;color:inherit;cursor:pointer}
 .wo-mini-row{padding:8px 0;border-bottom:1px solid #f0e6dc}
 .wo-mini-row:last-child{border-bottom:0}
 .wo-mini-name{font-size:13px;font-weight:650;line-height:1.35;overflow-wrap:anywhere;word-break:break-word}
-.wo-mini-meta{margin-top:2px;font-size:11px;color:var(--muted);line-height:1.35;overflow-wrap:anywhere}
+.wo-mini-meta{margin-top:2px;font-size:11px;color:#7a7168;line-height:1.35;overflow-wrap:anywhere}
 #woNameInput{min-height:52px;resize:vertical;line-height:1.35;overflow-wrap:anywhere;word-break:break-word}
 .chat-card textarea{
   width:100%;min-height:40px;margin:0;padding:10px 12px;font-size:15px;line-height:1.3;
@@ -183,17 +208,17 @@ button{border:0;background:none;color:inherit;cursor:pointer}
 .chat-toolbar .chat-thumb-wrap{flex:0 0 auto}
 .chat-toolbar .chat-thumb{width:36px;height:36px;border-radius:9px}
 .chat-toolbar .chip.ghost{min-height:28px;padding:4px 8px;font-size:12px}
-.chat-photo-hint{margin:4px 0 0;font-size:11px;line-height:1.3;color:var(--muted)}
+.chat-photo-hint{margin:4px 0 0;font-size:11px;line-height:1.3;color:#7a7168}
 .chat-photo-hint:empty,.chat-photo-hint.hide{display:none}
 textarea,input[type=text],input[type=number]{width:100%;border:1px solid var(--line);border-radius:14px;padding:12px;font-size:16px;background:#fff}
 textarea{resize:vertical;min-height:56px}
 .chat-card textarea{min-height:40px;padding:10px 12px;font-size:15px;border-radius:12px;resize:none}
 .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;padding:8px 12px env(safe-area-inset-bottom);background:#fffdf9ee;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);z-index:20}
-.tabs button{min-height:44px;min-width:64px;font-weight:700;color:var(--muted);font-size:13px}
+.tabs button{min-height:44px;min-width:64px;font-weight:700;color:#7a7168;font-size:13px}
 .tabs .on{color:var(--ink)}
 .meal{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:10px 0;border-bottom:1px solid #f0e6dc}
 .meal:last-child{border-bottom:0}
-.meal .meta{grid-column:1/-1;font-size:12px;color:var(--muted)}
+.meal .meta{grid-column:1/-1;font-size:12px;color:#7a7168}
 .meal .actions{display:flex;gap:6px;align-items:start}
 .meal img.thumb{width:44px;height:44px;object-fit:cover;border-radius:10px;grid-row:span 2}
 .sheet{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;z-index:40;padding:0;animation:fade .18s ease}
@@ -209,7 +234,7 @@ textarea{resize:vertical;min-height:56px}
 .oknote{background:#eef6f2;border:1px solid #cfe3da;border-radius:14px;padding:10px 12px;font-size:13px;color:#245245;margin:8px 0}
 .itemrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f3ebe3}
 .itemrow:last-of-type{border-bottom:0}
-.badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--soft);color:var(--muted)}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--soft);color:#7a7168}
 .badge.est{background:#fff1e0;color:var(--warn)}
 .badge.label{background:#e8f3ee;color:var(--ok)}
 .filebtn{position:relative;overflow:hidden}
@@ -235,7 +260,7 @@ textarea{resize:vertical;min-height:56px}
   </div>
   <div class="note hide" id="storageBanner"></div>
 
-  <div class="card" id="budgetCard">
+  <div class="card fuel-card mode-wait" id="fuelCard">
     <div class="row">
       <div>
         <p class="muted">Food left</p>
@@ -247,6 +272,15 @@ textarea{resize:vertical;min-height:56px}
       </div>
     </div>
     <div class="bar"><i id="barFill"></i></div>
+    <div class="fuel-split">
+      <div style="min-width:0">
+        <p class="muted">Burn</p>
+        <p class="big burn-title" id="modeLabel">Set Move</p>
+        <p class="burn-meta" id="burnMeta"></p>
+        <div class="burn-meter" id="burnMeter" aria-hidden="true"><i></i><i></i><i></i></div>
+      </div>
+      <div class="mode-icon" id="modeIcon" aria-hidden="true"></div>
+    </div>
   </div>
 
   <div class="card" id="moveCard">
@@ -262,13 +296,14 @@ textarea{resize:vertical;min-height:56px}
     </div>
   </div>
 
-  <div class="card compact" id="workoutCard">
-    <div class="row">
+  <div class="card wo-card" id="workoutCard">
+    <div class="wo-head">
       <div style="min-width:0">
-        <p class="muted">Workout</p>
-        <p class="big" id="workoutExtraLabel">No session</p>
+        <p class="wo-title">Workout</p>
+        <p class="wo-extra" id="workoutExtraLabel">No session</p>
       </div>
       <div class="compact-actions">
+        <button class="chip ghost" id="workoutManageBtn" type="button">Manage</button>
         <button class="chip ghost" id="workoutManualBtn" type="button">Extra</button>
         <label class="btn primary" id="workoutPhotoBtn" style="width:auto;margin:0;padding:6px 12px;min-height:32px;font-size:12px;border-radius:12px;display:inline-flex;align-items:center;cursor:pointer">
           Photo
@@ -276,8 +311,8 @@ textarea{resize:vertical;min-height:56px}
         </label>
       </div>
     </div>
-    <div class="chips sm" id="workoutSetChips"></div>
     <div class="wo-list" id="workoutTodayList"></div>
+    <div class="chips sm" id="workoutSetChips"></div>
   </div>
 
   <div class="card" id="proteinCard">
@@ -292,16 +327,6 @@ textarea{resize:vertical;min-height:56px}
       </div>
     </div>
     <div class="bar"><i id="proteinBarFill"></i></div>
-  </div>
-
-  <div class="card mode-card mode-wait" id="modeCard">
-    <div class="row">
-      <div style="min-width:0">
-        <p class="muted">Mode</p>
-        <p class="big" id="modeLabel">Set Move</p>
-      </div>
-      <div class="mode-icon" id="modeIcon" aria-hidden="true"></div>
-    </div>
   </div>
 
   <div class="card compact chat-card">
@@ -791,7 +816,7 @@ textarea{resize:vertical;min-height:56px}
       status.textContent = days + " day(s) · " + meals + " meal(s) · " + n + " personal food(s) stored on this phone.";
     }
     const ver = document.getElementById("appVersionLabel");
-    if (ver) ver.textContent = "App build: v53 · Workout plan cards — Force refresh if names still clip or weight progression is missing.";
+    if (ver) ver.textContent = "App build: v54 · Food+burn card · compact workout — Force refresh if Mode is still separate.";
 
     const hEl = document.getElementById("heightCm");
     const wEl = document.getElementById("weightKg");
@@ -1957,40 +1982,51 @@ textarea{resize:vertical;min-height:56px}
       return {
         net: null,
         label: "Set body",
-        detail: "Add weight in Setup (age/sex optional) to estimate BMR — then mode uses food vs BMR + Move"
+        family: "wait",
+        tier: 0,
+        detail: "Add weight in Setup (age/sex optional) to estimate BMR — then burn uses food vs BMR + Move"
       };
     }
     if (move == null || !(+move > 0)) {
       return {
         net: null,
         label: "Set Move",
+        family: "wait",
+        tier: 0,
         detail: "BMR ~" + body.bmr + " kcal · add Fitness Move so estimated burn = BMR + Move"
       };
     }
     const burnMove = Math.round(+move);
     const estimatedOut = body.bmr + burnMove + extra;
-    const balance = food - estimatedOut; // − = deficit (Burning)
+    const balance = food - estimatedOut; // − = deficit (burning)
     const sign = balance > 0 ? ("+" + balance) : String(balance);
     const extraBit = extra ? (" + workout extra " + extra) : "";
     const base = "Food " + food + " vs ~" + estimatedOut + " out (BMR " + body.bmr + " + Move " + burnMove + extraBit + ") · net " + sign + " kcal";
 
+    // Deficit tiers: how hard you're burning
+    if (balance <= -500) {
+      return { net: balance, label: "Strong burn", family: "Burning", tier: 3, detail: base + " · deep deficit" };
+    }
+    if (balance <= -350) {
+      return { net: balance, label: "Good burn", family: "Burning", tier: 2, detail: base + " · solid deficit" };
+    }
     if (balance <= -200) {
-      return { net: balance, label: "Burning", detail: base + " · deficit" };
+      return { net: balance, label: "Avg burn", family: "Burning", tier: 1, detail: base + " · mild deficit" };
     }
     if (balance < 200) {
-      return { net: balance, label: "Maintain", detail: base + " · near balance" };
+      return { net: balance, label: "Maintain", family: "Maintain", tier: 0, detail: base + " · near balance" };
     }
     // Surplus: eating more than estimated burn
     const highMove = burnMove >= 400;
     if (highMove && food >= BUDGET) {
-      return { net: balance, label: "Bulking", detail: base + " · surplus with solid Move" };
+      return { net: balance, label: "Bulking", family: "Bulking", tier: 2, detail: base + " · surplus with solid Move" };
     }
-    return { net: balance, label: "Fattening", detail: base + " · surplus (eating above burn)" };
+    return { net: balance, label: "Fattening", family: "Fattening", tier: 3, detail: base + " · surplus (eating above burn)" };
   }
 
   function modeIconSvg(label) {
     // Inline SVGs (not emoji) — fire / muscle / soft fat / balance / wait
-    if (label === "Burning") {
+    if (label === "Burning" || label === "Strong burn" || label === "Good burn" || label === "Avg burn") {
       return '<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">' +
         '<path d="M24 5c1.5 5.5-1.5 9-1.5 14 0 3.2 2.2 5.5 5.2 5.5 4.2 0 7.3-4.2 7.3-10.2 5.5 5.2 8 11.2 8 16.5C43 39.5 35.5 46 24 46S5 39.5 5 30.8C5 22.5 10.2 16.2 16 12c-1.2 4.2 1 8.2 4.2 8.2 2.2 0 3.5-2.2 3.5-5.2 0-4.2-1.8-7.2.3-10z" fill="currentColor"/>' +
         '<path d="M24 27.5c0 4.2 2.2 7.2 5.2 7.2 2.2 0 4-2 4-5.2 0-4-3-6.2-5.2-8.5-1.2 2.2-4 3.5-4 6.5z" fill="#fff" opacity=".42"/>' +
@@ -2308,7 +2344,7 @@ textarea{resize:vertical;min-height:56px}
     document.getElementById("left").textContent = left.toLocaleString() + " kcal";
     const pct = Math.min(100, Math.round((e / BUDGET) * 100));
     document.getElementById("barFill").style.width = pct + "%";
-    document.getElementById("budgetCard").classList.toggle("over", e > BUDGET);
+    document.getElementById("fuelCard").classList.toggle("over", e > BUDGET);
     document.getElementById("move").textContent = d.move ? (d.move + " kcal") : "—";
     const prot = eatenProtein(d);
     const pLeft = PROTEIN_GOAL - prot;
@@ -2324,16 +2360,34 @@ textarea{resize:vertical;min-height:56px}
     const mode = energyMode(e, d.move, d.workoutAdj);
     const modeLabel = document.getElementById("modeLabel");
     const modeIcon = document.getElementById("modeIcon");
-    const modeCard = document.getElementById("modeCard");
+    const fuelCard = document.getElementById("fuelCard");
+    const burnMeta = document.getElementById("burnMeta");
+    const burnMeter = document.getElementById("burnMeter");
     if (modeLabel) modeLabel.textContent = mode.label;
     if (modeIcon) modeIcon.innerHTML = modeIconSvg(mode.label);
-    if (modeCard) {
-      modeCard.classList.remove("mode-burn", "mode-bulk", "mode-fat", "mode-ok", "mode-wait", "over");
-      if (mode.label === "Burning") modeCard.classList.add("mode-burn");
-      else if (mode.label === "Bulking") modeCard.classList.add("mode-bulk");
-      else if (mode.label === "Fattening") modeCard.classList.add("mode-fat");
-      else if (mode.label === "Maintain") modeCard.classList.add("mode-ok");
-      else modeCard.classList.add("mode-wait");
+    if (burnMeta) {
+      if (mode.net == null) burnMeta.textContent = mode.detail || "";
+      else burnMeta.textContent = (mode.net > 0 ? "+" : "") + mode.net + " kcal vs burn";
+    }
+    if (burnMeter) {
+      const segs = burnMeter.querySelectorAll("i");
+      const tier = mode.tier || 0;
+      for (var si = 0; si < segs.length; si++) {
+        segs[si].classList.toggle("on", si < tier);
+      }
+    }
+    if (fuelCard) {
+      fuelCard.classList.remove("mode-burn", "mode-bulk", "mode-fat", "mode-ok", "mode-wait", "burn-avg", "burn-good", "burn-strong", "over");
+      const fam = mode.family || mode.label;
+      if (fam === "Burning") {
+        fuelCard.classList.add("mode-burn");
+        if (mode.label === "Strong burn") fuelCard.classList.add("burn-strong");
+        else if (mode.label === "Good burn") fuelCard.classList.add("burn-good");
+        else fuelCard.classList.add("burn-avg");
+      } else if (fam === "Bulking") fuelCard.classList.add("mode-bulk");
+      else if (fam === "Fattening") fuelCard.classList.add("mode-fat");
+      else if (fam === "Maintain") fuelCard.classList.add("mode-ok");
+      else fuelCard.classList.add("mode-wait");
     }
     document.getElementById("count").textContent = (d.meals || []).length;
     const list = document.getElementById("meals");
@@ -2389,8 +2443,9 @@ textarea{resize:vertical;min-height:56px}
     const hasSignal = food > 0 || (d.meals && d.meals.length) || (move != null && +move > 0);
     if (!hasSignal) return null;
     const mode = energyMode(food, move, syncWorkoutAdj(d));
-    if (mode.label === "Burning" || mode.label === "Maintain" || mode.label === "Bulking" || mode.label === "Fattening") {
-      return mode.label;
+    const fam = mode.family || mode.label;
+    if (fam === "Burning" || fam === "Maintain" || fam === "Bulking" || fam === "Fattening") {
+      return fam;
     }
     return null;
   }
@@ -3143,22 +3198,9 @@ textarea{resize:vertical;min-height:56px}
         ? ("+" + d.workoutAdj + " extra kcal")
         : "No session";
     }
-    const chips = document.getElementById("workoutSetChips");
-    if (chips) {
-      const sets = loadWorkoutSets();
-      if (!sets.length) {
-        chips.innerHTML = '<span class="tiny">No sets yet — use Photo.</span>';
-      } else {
-        chips.innerHTML = sets.slice(0, 12).map(function (s) {
-          return '<button type="button" class="chip" data-set="' + s.id + '">' + escapeHtml(s.name) +
-            '<span class="tiny"> · ' + (s.estimateKcal || 0) + " est</span></button>";
-        }).join("") +
-          '<button type="button" class="chip ghost" data-manage="1">Manage</button>';
-      }
-    }
+    const sessions = normalizeWorkouts(d.workouts);
     const list = document.getElementById("workoutTodayList");
     if (list) {
-      const sessions = normalizeWorkouts(d.workouts);
       if (!sessions.length) {
         list.innerHTML = "";
       } else {
@@ -3166,6 +3208,24 @@ textarea{resize:vertical;min-height:56px}
           return '<div class="itemrow"><div><b>' + escapeHtml(w.name) + "</b>" +
             '<div class="tiny">est ' + w.estimateKcal + " · counted +" + w.extraKcal + "</div></div>" +
             '<button type="button" class="chip ghost" data-del-wo="' + w.id + '" aria-label="Remove">✕</button></div>';
+        }).join("");
+      }
+    }
+    const chips = document.getElementById("workoutSetChips");
+    if (chips) {
+      const sets = loadWorkoutSets();
+      // When a session is already logged, hide set chips (Manage is in the header) to keep the card short.
+      if (sessions.length) {
+        chips.innerHTML = "";
+        chips.classList.add("hide");
+      } else if (!sets.length) {
+        chips.classList.remove("hide");
+        chips.innerHTML = '<span class="tiny">No sets yet — use Photo.</span>';
+      } else {
+        chips.classList.remove("hide");
+        chips.innerHTML = sets.slice(0, 8).map(function (s) {
+          return '<button type="button" class="chip" data-set="' + s.id + '">' + escapeHtml(s.name) +
+            '<span class="tiny"> · ' + (s.estimateKcal || 0) + " est</span></button>";
         }).join("");
       }
     }
@@ -3535,6 +3595,8 @@ textarea{resize:vertical;min-height:56px}
 
   // --- wire UI ---
   document.getElementById("editMoveBtn").onclick = openMoveEditor;
+
+    document.getElementById("workoutManageBtn").onclick = function () { openManageWorkoutSets(); };
 
   document.getElementById("workoutManualBtn").onclick = openWorkoutEditor;
 
