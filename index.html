@@ -109,27 +109,27 @@ main, .panel{max-width:430px;margin:0 auto;padding:calc(14px + env(safe-area-ins
 .week-trend{margin:10px 0 4px;padding:12px;border-radius:14px;background:#fff;border:1px solid #f0e7dd}
 .week-trend .wt-title{margin:0;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#7a7168}
 .week-trend .wt-sum{margin:4px 0 10px;font-size:13px;font-weight:650;color:#1c1612;line-height:1.35}
-.week-chart{display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:stretch;width:100%}
-.week-ylabels{position:relative;height:72px;margin-bottom:18px}
+.week-chart{display:grid;grid-template-columns:36px 1fr;gap:6px;align-items:start;width:100%}
+.week-ylabels{position:relative;height:88px;margin:0 0 16px;flex-shrink:0}
 .week-ylabels span{
   position:absolute;right:0;transform:translateY(50%);
-  font-size:9px;font-weight:700;line-height:1;white-space:nowrap;max-width:34px;text-align:right;
+  font-size:9px;font-weight:700;line-height:1;white-space:nowrap;max-width:36px;text-align:right;
 }
 .week-ylabels .yl-food{color:#2f6f5e}
 .week-ylabels .yl-avg{color:#c47a4a}
 .week-ylabels .yl-strong{color:#c62828}
 .week-plot{position:relative;min-width:0}
-.week-plot .wt-guides{position:absolute;left:0;right:0;top:0;height:72px;pointer-events:none;z-index:1}
+.week-plot .wt-guides{position:absolute;left:0;right:0;top:0;height:88px;pointer-events:none;z-index:1}
 .week-plot .wt-guide{
   position:absolute;left:0;right:0;border-top:1.5px solid;
   transform:translateY(50%);
 }
-.week-plot .wt-guide.food{border-color:#2f6f5e;opacity:.85}
-.week-plot .wt-guide.avg{border-color:#e89a5c;border-top-style:dashed;opacity:.9}
-.week-plot .wt-guide.strong{border-color:#c62828;border-top-style:dashed;opacity:.75}
-.week-bars{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:end;height:72px;width:100%;position:relative;z-index:2}
+.week-plot .wt-guide.food{border-color:#2f6f5e;opacity:.9}
+.week-plot .wt-guide.avg{border-color:#e89a5c;border-top-style:dashed;opacity:.95}
+.week-plot .wt-guide.strong{border-color:#c62828;border-top-style:dashed;opacity:.8}
+.week-bars{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:end;height:88px;width:100%;position:relative;z-index:2}
 .week-bars .wt-col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:0;height:100%}
-.week-bars .wt-pair{display:flex;align-items:flex-end;justify-content:center;gap:3px;width:100%;height:72px}
+.week-bars .wt-pair{display:flex;align-items:flex-end;justify-content:center;gap:3px;width:100%;height:88px}
 .week-bars .wt-food,.week-bars .wt-burn{
   display:block;width:42%;max-width:14px;border-radius:5px 5px 2px 2px;align-self:flex-end;
   min-height:3px;box-sizing:border-box;
@@ -2538,7 +2538,7 @@ textarea{resize:vertical;min-height:56px}
       maxV = Math.max(maxV, food, burn);
       days.push({ key: key, dow: dows[dt.getDay()], food: food, burn: burn });
     }
-    var plotH = 72;
+    var plotH = 88;
     var scale = Math.max(maxV, strongBurnGuide, foodGuide) * 1.08;
     function yPx(v) {
       return Math.max(0, Math.min(plotH, Math.round((v / scale) * plotH)));
@@ -2587,7 +2587,7 @@ textarea{resize:vertical;min-height:56px}
       '<div class="week-bars">' + bars + "</div>" +
       '<div class="week-dows">' + dowRow + "</div>" +
       "</div></div>" +
-      '<p class="wt-legend">Green bars = food · Coral = burn · Solid green line = 1800 food plan · Dashed = burn vs that plan (Avg / Strong)</p>'
+      '<p class="wt-legend">Green = food vs <b>1800</b> plan · Coral = burn · Dashed Avg/Strong = burn needed vs that plan</p>'
     );
   }
 
